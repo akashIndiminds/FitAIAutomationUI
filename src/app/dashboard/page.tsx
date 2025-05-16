@@ -128,7 +128,7 @@ export default function Dashboard() {
       const autoTriggerTimer = setTimeout(() => {
         if (!isProcessing && !pending.length && !downloaded.length) {
           // Auto start processing (commented for now)
-          // triggerStart();
+          triggerStart();
         }
       }, 300000);
       

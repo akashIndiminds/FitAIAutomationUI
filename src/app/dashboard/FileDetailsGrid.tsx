@@ -252,7 +252,7 @@ export default function FileDetailsGrid({ files, type, onBack, onOpenFolder }: F
                         title="View in folder"
                       >
                         <ExternalLink className="h-4 w-4 mr-1" />
-                        <span>Open</span>
+                        <span>Open In Folder</span>
                       </button>
                     </div>
                   </td>

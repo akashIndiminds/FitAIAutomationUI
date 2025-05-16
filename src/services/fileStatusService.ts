@@ -28,7 +28,7 @@ export interface FileStatus {
 export const getFileStatus = async (startDate: string, endDate: string): Promise<FileStatus[]> => {
   try {
     // API call: GET /api/automate/status?startDate={startDate}&endDate={endDate}
-    const response = await axios.get(`/api/automate/status`, {
+    const response = await axios.get(`http://192.168.1.130:3000/api/automate/status`, {
       params: { startDate, endDate }
     });
     return response.data;
