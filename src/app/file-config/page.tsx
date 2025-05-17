@@ -28,7 +28,7 @@ export default function FileConfigPage() {
   const [fileConfigs, setFileConfigs] = useState<FileConfig[]>([]);
   const [filteredConfigs, setFilteredConfigs] = useState<FileConfig[]>([]);
   const [displayedConfigs, setDisplayedConfigs] = useState<FileConfig[]>([]);
-  const [selectedConfigIds, setSelectedConfigIds] = useState<number[]>([]);
+  const [currentSelection, setCurrentSelection] = useState<number[]>([]);
   const [selectedConfigs, setSelectedConfigs] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(false);
@@ -93,6 +93,7 @@ export default function FileConfigPage() {
       setFileConfigs(configs);
       const selectedIds = extractIds(selected);
       setSelectedConfigs(selectedIds);
+      setCurrentSelection(selectedIds);
     }
     setIsDataLoading(false);
   }, []);
@@ -107,13 +108,12 @@ export default function FileConfigPage() {
          config.dirName.toLowerCase().includes(searchTerm.toLowerCase()) ||
          config.segment.toLowerCase().includes(searchTerm.toLowerCase()) ||
          (config.folderName?.toLowerCase() || '').includes(searchTerm.toLowerCase()));
-      const matchesSelection = !showOnlySelected || 
-        selectedConfigs.includes(config.id) || selectedConfigIds.includes(config.id);
+      const matchesSelection = !showOnlySelected || currentSelection.includes(config.id);
       return matchesDirectory && matchesSegment && matchesFolder && matchesSearch && matchesSelection;
     });
     setFilteredConfigs(filtered);
     setCurrentPage(1);
-  }, [fileConfigs, selectedDirectory, selectedSegment, selectedFolder, searchTerm, showOnlySelected, selectedConfigs, selectedConfigIds]);
+  }, [fileConfigs, selectedDirectory, selectedSegment, selectedFolder, searchTerm, showOnlySelected, currentSelection]);
 
   const updatePagination = useCallback(() => {
     const total = Math.ceil(filteredConfigs.length / pageSize) || 1;
@@ -128,13 +128,13 @@ export default function FileConfigPage() {
   }, [totalPages]);
 
   const toggleSelection = useCallback((id: number) => {
-    setSelectedConfigIds(prev => 
+    setCurrentSelection(prev => 
       prev.includes(id) ? prev.filter(configId => configId !== id) : [...prev, id]
     );
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    setSelectedConfigIds(prev => {
+    setCurrentSelection(prev => {
       const allDisplayedSelected = displayedConfigs.every(config => prev.includes(config.id));
       if (allDisplayedSelected) {
         return prev.filter(id => !displayedConfigs.some(config => config.id === id));
@@ -145,6 +145,17 @@ export default function FileConfigPage() {
     });
   }, [displayedConfigs]);
 
+  const selectAllFiles = useCallback(() => {
+    const allFilesSelected = fileConfigs.every(config => currentSelection.includes(config.id));
+    if (allFilesSelected) {
+      setCurrentSelection([]);
+    } else {
+      setCurrentSelection(fileConfigs.map(config => config.id));
+    }
+  }, [fileConfigs, currentSelection]);
+
+  const hasSelectedAll = fileConfigs.every(config => currentSelection.includes(config.id));
+
   const resetFilters = useCallback(() => {
     setSelectedDirectory('');
     setSelectedSegment('');
@@ -154,22 +165,22 @@ export default function FileConfigPage() {
   }, []);
 
   const createConfig = useCallback(async () => {
-    if (selectedConfigIds.length === 0) {
+    if (currentSelection.length === 0) {
       setMessage({ type: 'error', text: 'Please select at least one file' });
       return;
     }
     setIsLoading(true);
     try {
-      await createConfiguration(selectedConfigIds);
+      await createConfiguration(currentSelection);
       setMessage({ type: 'success', text: 'Configuration created successfully' });
-      setSelectedConfigIds([]);
+      setCurrentSelection([]);
       await loadData();
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to create configuration' });
     } finally {
       setIsLoading(false);
     }
-  }, [selectedConfigIds, loadData]);
+  }, [currentSelection, loadData]);
 
   const dismissMessage = useCallback(() => setMessage(null), []);
 
@@ -192,9 +203,9 @@ export default function FileConfigPage() {
             setSearchTerm={setSearchTerm}
             createConfig={createConfig}
             isLoading={isLoading}
-            selectedCount={selectedConfigIds.length}
+            selectedCount={currentSelection.length}
           />
-          <Filters
+          <Filters 
             directories={directories}
             segments={segments}
             folderNames={folderNames}
@@ -205,9 +216,11 @@ export default function FileConfigPage() {
             selectedFolder={selectedFolder}
             setSelectedFolder={setSelectedFolder}
             resetFilters={resetFilters}
-            selectedCount={selectedConfigIds.length}
+            selectedCount={currentSelection.length}
             showOnlySelected={showOnlySelected}
             setShowOnlySelected={setShowOnlySelected}
+            selectAllFiles={selectAllFiles}
+            hasSelectedAll={hasSelectedAll}
           />
           {message && (
             <Message
@@ -225,10 +238,10 @@ export default function FileConfigPage() {
             <>
               <Table
                 displayedConfigs={displayedConfigs}
-                selectedConfigIds={selectedConfigIds}
+                currentSelection={currentSelection}
                 toggleSelection={toggleSelection}
                 toggleSelectAll={toggleSelectAll}
-                isSelectedConfig={(id) => selectedConfigs.includes(id)}
+                previouslySelected={selectedConfigs}
               />
               <Pagination
                 currentPage={currentPage}

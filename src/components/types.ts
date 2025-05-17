@@ -1,4 +1,16 @@
 // types.ts (create this file if not already present)
+export interface ActivityLog {
+  id: number;
+  dir: string;
+  segment: string;
+  filename: string;
+  filetype: string;
+  spName: string;
+  spStatus: string;
+  dlStatus: string;
+  lastModified: string;
+}
+
 export interface FileStatus {
   id: string;
   dir: string;
@@ -29,13 +41,4 @@ export interface FileStats {
   importedFiles: number;
   processingSpeed: string;
   lastUpdated: string;
-}
-
-export interface ActivityLog {
-  id: string;
-  action: string;
-  status: string;
-  timestamp: string;
-  details: string;
-  user: string;
 }
