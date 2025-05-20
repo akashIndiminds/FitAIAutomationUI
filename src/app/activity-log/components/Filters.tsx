@@ -22,7 +22,7 @@ export function Filters({
   setSearchTerm,
   onClose
 }: FiltersProps) {
-  const fileTypes = ['csv', 'pdf', 'xlsx', 'json', 'xml'];
+  const fileTypes = ['gz', 'pdf', 'xlsx', 'json', 'xml'];
   const statusTypes = ['Completed', 'Pending', 'Failed'];
   const itemsPerPageOptions = [5, 10, 25, 50, 100];
 

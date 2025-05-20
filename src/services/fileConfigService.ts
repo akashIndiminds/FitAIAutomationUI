@@ -1,4 +1,4 @@
-const baseUrl = 'http://192.168.1.131:3000/api/automate';
+const baseUrl = 'http://192.168.1.119:3000/api/automate';
 
 export const getFileConfigurations = async () => {
   try {

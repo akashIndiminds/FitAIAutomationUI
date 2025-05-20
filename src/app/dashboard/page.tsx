@@ -479,7 +479,6 @@ export default function Dashboard() {
             <div className="transform transition-all duration-300">
               <StatsCards 
                 stats={stats} 
-                onShowDetails={showFileDetails}
               />
             </div>
             

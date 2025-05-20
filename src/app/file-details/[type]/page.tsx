@@ -2,7 +2,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import FileManagement from '@/app/file-details/FileManagement';
+import FileManagement from '@/app/file-details/FileManagement/FileManagement';
 
 export default function FileDetailsPage() {
   const params = useParams();

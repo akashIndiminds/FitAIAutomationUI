@@ -6,11 +6,10 @@ export interface ActivityLog {
   filename: string;
   filetype: string;
   spName: string;
-  spStatus: string;
-  dlStatus: string;
+  spStatus: number; 
+  dlStatus: number; 
   lastModified: string;
 }
-
 export interface FileStatus {
   id: string;
   dir: string;

@@ -18,7 +18,7 @@ export default function Header({
 }: ActivityLogHeaderProps) {
   return (
     <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-indigo-900 via-blue-800 to-indigo-900 rounded-t-lg shadow-md">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full mx-auto">
         <div className="flex items-center">
           <h1 className="text-xl font-bold text-white">
             Activity Log Dashboard

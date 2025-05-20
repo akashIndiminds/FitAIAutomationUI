@@ -43,17 +43,6 @@ export default function ActivityLogPage() {
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const mockData = Array(25).fill(null).map((_, i) => ({
-    id: i + 1,
-    dir: ['incoming', 'outgoing', 'processed'][Math.floor(Math.random() * 3)],
-    segment: ['finance', 'marketing', 'sales', 'operations'][Math.floor(Math.random() * 4)],
-    filename: `file_${i + 1}.${['csv', 'pdf', 'xlsx', 'json', 'xml'][Math.floor(Math.random() * 5)]}`,
-    filetype: ['csv', 'pdf', 'xlsx', 'json', 'xml'][Math.floor(Math.random() * 5)],
-    spName: `StoredProc_${['Extract', 'Transform', 'Load', 'Process'][Math.floor(Math.random() * 4)]}_${i % 10}`,
-    spStatus: [200, 202, 404, 500][Math.floor(Math.random() * 4)],
-    dlStatus: [200, 202, 404, 500][Math.floor(Math.random() * 4)],
-    lastModified: new Date(Date.now() - Math.floor(Math.random() * 86400000)).toISOString(),
-  }));
 
   const applyFilters = useCallback(
     (logs = activityLogs) => {
@@ -266,7 +255,7 @@ export default function ActivityLogPage() {
   }, [applyFilters]);
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 px-4 py-6">
+    <div className="w-full min-h-screen bg-gray-50 px-4 py-4">
       <div className={`w-full mx-auto transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
         <Header
           searchTerm={searchTerm}
@@ -314,7 +303,7 @@ export default function ActivityLogPage() {
           </div>
         )}
         
-        <main className="mt-6">
+        <main className="mt-1">
           <div className="bg-white rounded-lg shadow overflow-hidden">
             {isLoading ? (
               <div className="flex justify-center items-center p-12">
