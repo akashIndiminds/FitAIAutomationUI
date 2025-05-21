@@ -5,8 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import Header from './components/Header';
 import FileGrid from './components/FileGrid';
 import FileTable from './components/FileTable';
+import Pagination from '@/components/Pagination';
 import { FileStatus } from '@/components/types';
-
 import { 
   FileSpreadsheet, 
   FileText, 
@@ -15,7 +15,6 @@ import {
   Download,
   Upload,
 } from 'lucide-react';
-
 
 interface FileManagementProps {
   initialFiles?: FileStatus[];
@@ -34,10 +33,11 @@ export default function FileManagement({
   const pathname = usePathname();
   
   const [files, setFiles] = useState<FileStatus[]>(initialFiles);
- const [sortField, setSortField] = useState<keyof FileStatus>('createdTime');
+  const [sortField, setSortField] = useState<keyof FileStatus>('createdTime');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [currentPage, setCurrentPage] = useState(1); // Add state for current page
   
   const activeType = useMemo(() => {
     if (pathname.includes('pending')) return 'pending';
@@ -57,7 +57,7 @@ export default function FileManagement({
       if (data.success) {
         const fetchedFiles: FileStatus[] = data.data.map((file: any, index: number) => ({
           ...file,
-          id: `${file.filename}-${index}`, // Generate a unique ID
+          id: `${file.filename}-${index}`,
         }));
         setFiles(fetchedFiles);
       } else {
@@ -68,14 +68,12 @@ export default function FileManagement({
     }
   };
 
-  // Fetch data on mount and every 5 seconds
   useEffect(() => {
     fetchFiles();
     const interval = setInterval(fetchFiles, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Determine file type based on dlStatus and spStatus
   const getFileType = (file: FileStatus): 'pending' | 'downloaded' | 'imported' => {
     if (file.dlStatus === 404) {
       return 'pending';
@@ -84,15 +82,13 @@ export default function FileManagement({
     } else if (file.spStatus !== undefined && file.spStatus !== 404) {
       return 'imported';
     }
-    return 'pending'; // Default case
+    return 'pending';
   };
 
-  // Filter files by activeType
   const typeFilteredFiles = useMemo(() => {
     return files.filter(file => getFileType(file) === activeType);
   }, [files, activeType]);
 
-  // Further filter by search term
   const searchFilteredFiles = useMemo(() => {
     return typeFilteredFiles.filter(file => 
       file.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -101,7 +97,6 @@ export default function FileManagement({
     );
   }, [typeFilteredFiles, searchTerm]);
 
-  // Sort the filtered files
   const sortedFiles = useMemo(() => {
     return [...searchFilteredFiles].sort((a, b) => {
       if (sortField === 'createdTime' || sortField === 'dlTime' || sortField === 'spTime') {
@@ -118,6 +113,29 @@ export default function FileManagement({
     });
   }, [searchFilteredFiles, sortField, sortDirection]);
   
+  // Pagination logic
+  const filesPerPage = 9;
+  const currentFiles = useMemo(() => {
+    const indexOfFirstFile = (currentPage - 1) * filesPerPage;
+    const indexOfLastFile = currentPage * filesPerPage;
+    return sortedFiles.slice(indexOfFirstFile, indexOfLastFile);
+  }, [sortedFiles, currentPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeType, searchTerm]);
+
+  // Adjust currentPage if it exceeds total pages
+  useEffect(() => {
+    const totalPages = Math.ceil(sortedFiles.length / filesPerPage);
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    } else if (totalPages === 0 && currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [sortedFiles, filesPerPage, currentPage]);
+
   const getFileIcon = useCallback((filename: string) => {
     const extension = filename.split('.').pop()?.toLowerCase();
     if (extension === 'csv' || extension === 'xlsx' || extension === 'xls') {
@@ -198,7 +216,7 @@ export default function FileManagement({
       />
       {viewMode === 'grid' ? (
         <FileGrid
-          files={sortedFiles}
+          files={currentFiles} // Use currentFiles instead of sortedFiles
           activeType={activeType}
           onOpenFolder={onOpenFolderHandler}
           getFileIcon={getFileIcon}
@@ -206,7 +224,7 @@ export default function FileManagement({
         />
       ) : (
         <FileTable
-          files={sortedFiles}
+          files={currentFiles} // Use currentFiles instead of sortedFiles
           activeType={activeType}
           sortField={sortField}
           sortDirection={sortDirection}
@@ -216,6 +234,12 @@ export default function FileManagement({
           formatDate={formatDate}
         />
       )}
+      <Pagination
+        totalFiles={sortedFiles.length}
+        filesPerPage={filesPerPage}
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

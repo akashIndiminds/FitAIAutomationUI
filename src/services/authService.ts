@@ -1,7 +1,6 @@
 // services/authService.ts
 import axios, { AxiosInstance } from 'axios';
 import { getCookie, setCookie, deleteCookie } from 'cookies-next';
-import { toast } from 'react-hot-toast';
 import { config } from '@/app/config/appconfig';
 
 export interface LoginCredentials {
@@ -30,6 +29,7 @@ class AuthService {
   private maxRetries: number = 3;
   private readonly TOKEN_KEY = 'auth_token';
   private readonly LOGIN_TIME_KEY = 'login_time';
+  private readonly REFRESH_INTERVAL = 25 * 60 * 1000; // 25 minutes (to refresh before 30-min expiry)
   
   constructor() {
     this.api = axios.create({
@@ -106,6 +106,15 @@ class AuthService {
   async login(credentials = config.loginCredentials): Promise<LoginResponse> {
     try {
       const response = await this.api.post<LoginResponse>('/api/login/auth', credentials);
+      
+      if (response.data.success && response.data.msg.token) {
+        // Set token and login time in cookies when login is successful
+        this.setToken(response.data.msg.token);
+        this.setLoginTime(Date.now().toString());
+        // Start token refresh cycle
+        this.startTokenRefresh();
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Login error:', error);
@@ -129,23 +138,56 @@ class AuthService {
   }
 
   /**
-   * Refreshes the authentication token
+   * Refreshes the authentication token using API endpoint
    */
   async refreshToken(): Promise<boolean> {
     try {
-      const response = await this.login();
+      // Use the dedicated refresh endpoint
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies in the request
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success && data.token) {
+        // Token refreshed via API, cookies should be set by the API
+        this.retryCount = 0;
+        console.log('Token refreshed successfully via API');
+        return true;
+      }
+      
+      // If API refresh failed, attempt to refresh directly
+      console.log('API refresh failed, attempting direct refresh');
+      return await this.refreshDirectly();
+    } catch (error) {
+      console.error('Token refresh API error:', error);
+      // Fallback to direct refresh if API call fails
+      return await this.refreshDirectly();
+    }
+  }
+
+  /**
+   * Direct token refresh without using the API endpoint
+   * Used as a fallback if the API refresh fails
+   */
+  private async refreshDirectly(): Promise<boolean> {
+    try {
+      const response = await this.login(config.loginCredentials);
       
       if (response.success && response.msg.status === 'success' && response.msg.token) {
         this.setToken(response.msg.token);
         this.setLoginTime(Date.now().toString());
         this.retryCount = 0;
-        this.scheduleNextRefresh(30 * 60 * 1000); // Schedule next refresh in 30 minutes
         return true;
       }
       
       return false;
     } catch (error) {
-      console.error('Token refresh error:', error);
+      console.error('Direct token refresh error:', error);
       return false;
     }
   }
@@ -159,19 +201,18 @@ class AuthService {
       this.refreshTimer = null;
     }
 
-    const token = this.getToken();
-    
-    if (token) {
-      try {
-        await this.api.post('/api/logout', {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        console.log('Logout request successful');
-      } catch (error) {
-        console.log('Logout request failed', error);
-      }
+    try {
+      // Use dedicated logout API endpoint
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include', // Include cookies in the request
+      });
+      console.log('Logout request successful');
+    } catch (error) {
+      console.log('Logout request failed', error);
     }
     
+    // Clear local tokens
     this.clearTokens();
     
     if (!silent) {
@@ -182,14 +223,18 @@ class AuthService {
   /**
    * Starts token refresh process
    */
-startTokenRefresh(): void {
-  this.retryCount = 0;
-  // Add a 5-second delay before scheduling the first refresh
-  setTimeout(() => {
-    this.scheduleNextRefresh(30 * 60 * 1000); // 30 minutes
-    console.log('Token refresh scheduled for 30 minutes from now');
-  }, 5000); // 5-second delay
-}
+  startTokenRefresh(): void {
+    this.retryCount = 0;
+    // Clear any existing timer
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    
+    // Set the token refresh to run every REFRESH_INTERVAL
+    this.scheduleNextRefresh(this.REFRESH_INTERVAL);
+    console.log(`Token refresh scheduled for ${this.REFRESH_INTERVAL / (60 * 1000)} minutes from now`);
+  }
+
   /**
    * Schedules next token refresh
    */
@@ -199,33 +244,19 @@ startTokenRefresh(): void {
     }
     
     this.refreshTimer = setTimeout(() => {
-      this.refreshNseToken();
-    }, delay);
-  }
-
-  /**
-   * Refreshes NSE token
-   */
-  private async refreshNseToken(): Promise<void> {
-    console.log('Attempting to refresh NSE token...');
-    
-    try {
-      const response = await this.login();
-      
-      if (response.success && response.msg.status === 'success' && response.msg.token) {
-        console.log('Token refreshed successfully');
-        this.setToken(response.msg.token);
-        this.setLoginTime(Date.now().toString());
-        this.retryCount = 0;
-        this.scheduleNextRefresh(30 * 60 * 1000);
-      } else {
-        console.error('Token refresh failed with response:', response);
+      this.refreshToken().then(success => {
+        if (success) {
+          console.log('Token refreshed successfully, scheduling next refresh');
+          this.scheduleNextRefresh(this.REFRESH_INTERVAL);
+        } else {
+          console.error('Token refresh failed, attempting retry');
+          this.handleRefreshFailure();
+        }
+      }).catch(err => {
+        console.error('Error in token refresh:', err);
         this.handleRefreshFailure();
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      this.handleRefreshFailure();
-    }
+      });
+    }, delay);
   }
 
   /**
@@ -298,7 +329,14 @@ startTokenRefresh(): void {
    */
   isAuthenticated(): boolean {
     const token = this.getToken();
-    return !!token && !this.isTokenExpired();
+    if (!!token && !this.isTokenExpired()) {
+      // If authenticated and no refresh timer, start one
+      if (!this.refreshTimer) {
+        this.startTokenRefresh();
+      }
+      return true;
+    }
+    return false;
   }
 }
 

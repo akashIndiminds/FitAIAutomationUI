@@ -26,7 +26,7 @@ export default function Controls({
   downloadCycleMessage
 }: ControlsProps) {
   return (
-    <div className="w-full bg-white rounded-lg shadow mb-6 p-4">
+    <div className="w-full bg-white rounded-lg shadow mb- p-2">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div>
@@ -35,7 +35,7 @@ export default function Controls({
               type="date" 
               className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 w-full md:w-auto"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              readOnly
               disabled={isProcessing}
             />
           </div>
@@ -45,7 +45,7 @@ export default function Controls({
               type="date" 
               className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 w-full md:w-auto"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              readOnly
               disabled={isProcessing}
             />
           </div>

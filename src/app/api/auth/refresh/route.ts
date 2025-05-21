@@ -4,18 +4,14 @@ import { config } from '@/app/config/appconfig';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get the token from the cookies
-    const token = request.cookies.get('auth_token')?.value;
+    console.log('Token refresh requested');
     
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'No token provided' },
-        { status: 401 }
-      );
-    }
+    // Get current login time from cookies (for monitoring purposes)
+    const currentLoginTime = request.cookies.get('login_time')?.value;
+    console.log(`Current login time: ${currentLoginTime}`);
     
-    // Forward the refresh request to the backend API
-    const response = await fetch(`${config.baseUrl}/api/login/auth`, {
+    // Always refresh using NSE credentials - this ensures continuous session
+    const refreshResponse = await fetch(`${config.baseUrl}/api/login/auth`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -23,43 +19,50 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(config.loginCredentials),
     });
     
-    const data = await response.json();
+    const refreshData = await refreshResponse.json();
     
-    if (!response.ok || !data.success || data.msg.status !== 'success') {
+    if (!refreshResponse.ok || !refreshData.success || refreshData.msg.status !== 'success' || !refreshData.msg.token) {
+      console.error('NSE token refresh failed:', refreshData);
       return NextResponse.json(
-        { success: false, message: 'Failed to refresh token' },
+        { success: false, message: 'Failed to refresh token with NSE' },
         { status: 401 }
       );
     }
     
-    // Return the new token
-    const newToken = data.msg.token;
+    // Get the new token and set expiry time
+    const newToken = refreshData.msg.token;
     const expiresIn = 60 * 60; // 1 hour in seconds
     
-    // Create a new response with the updated token
-    const newResponse = NextResponse.json({ success: true, token: newToken });
+    console.log('Token refreshed successfully');
     
-    // Set the new token as a cookie
-    newResponse.cookies.set('auth_token', newToken, {
+    // Create response with new token
+    const response = NextResponse.json({
+      success: true,
+      token: newToken,
+      message: 'Token refreshed successfully'
+    });
+    
+    // Set the updated token in cookies
+    response.cookies.set('auth_token', newToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: expiresIn,
       path: '/',
     });
     
-    // Set the login time
-    newResponse.cookies.set('login_time', Date.now().toString(), {
+    // Update the login time
+    response.cookies.set('login_time', Date.now().toString(), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: expiresIn,
       path: '/',
     });
     
-    return newResponse;
+    return response;
   } catch (error) {
     console.error('Token refresh error:', error);
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { success: false, message: 'Internal server error during token refresh' },
       { status: 500 }
     );
   }

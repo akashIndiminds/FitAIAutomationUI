@@ -112,13 +112,21 @@ export default function FileConfigPage() {
       return matchesDirectory && matchesSegment && matchesFolder && matchesSearch && matchesSelection;
     });
     setFilteredConfigs(filtered);
-    setCurrentPage(1);
+    // DON'T reset to page 1 automatically when applying filters
+    // This will be done explicitly when filters change
   }, [fileConfigs, selectedDirectory, selectedSegment, selectedFolder, searchTerm, showOnlySelected, currentSelection]);
 
   const updatePagination = useCallback(() => {
     const total = Math.ceil(filteredConfigs.length / pageSize) || 1;
     setTotalPages(total);
-    const startIndex = (currentPage - 1) * pageSize;
+    
+    // Check if current page is valid after filter changes
+    const validPage = Math.min(currentPage, total);
+    if (validPage !== currentPage) {
+      setCurrentPage(validPage);
+    }
+    
+    const startIndex = (validPage - 1) * pageSize;
     const endIndex = Math.min(startIndex + pageSize, filteredConfigs.length);
     setDisplayedConfigs(filteredConfigs.slice(startIndex, endIndex));
   }, [filteredConfigs, currentPage, pageSize]);
@@ -162,6 +170,8 @@ export default function FileConfigPage() {
     setSelectedFolder('');
     setSearchTerm('');
     setShowOnlySelected(false);
+    // When explicitly resetting filters, go back to page 1
+    setCurrentPage(1);
   }, []);
 
   const createConfig = useCallback(async () => {
@@ -184,9 +194,25 @@ export default function FileConfigPage() {
 
   const dismissMessage = useCallback(() => setMessage(null), []);
 
+  // Main effects
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { applyFilters(); }, [applyFilters]);
-  useEffect(() => { updatePagination(); }, [updatePagination]);
+  
+  // When filter criteria change, apply filters and reset to page 1
+  useEffect(() => {
+    applyFilters();
+    setCurrentPage(1); // Reset to page 1 when filters change
+  }, [selectedDirectory, selectedSegment, selectedFolder, searchTerm, showOnlySelected]);
+  
+  // When selection changes, just apply filters without changing page
+  useEffect(() => {
+    applyFilters();
+  }, [currentSelection]);
+  
+  // Update pagination when filtered data or pagination settings change
+  useEffect(() => {
+    updatePagination();
+  }, [filteredConfigs, currentPage, pageSize, updatePagination]);
+  
   useEffect(() => {
     if (message) {
       const timer = setTimeout(dismissMessage, 3000);
