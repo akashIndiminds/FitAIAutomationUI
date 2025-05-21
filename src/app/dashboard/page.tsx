@@ -1,331 +1,327 @@
 'use client';
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast, Toaster } from 'react-hot-toast';
+
+// Import sub-components (assumed to be implemented separately)
 import Controls from './Controls';
 import StatsCards from './StatsCards';
-import ActivityLog from './ActivityLog';
 import FileStatusOverview from './FileStatusOverview';
+import ActivityLog from './ActivityLog';
 import FileDetailsGrid from './FileDetailsGrid';
-import authService from '@/services/authService';
-import * as fileStatusService from '@/services/fileStatusService';
-import * as downloadService from '@/services/downloadService';
-import * as importService from '@/services/importService';
-import * as buildTaskService from '@/services/buildTaskService';
+import authService from '@/services/authService'; // Authentication service
+import { FileStatus, FileStats } from '@/components/types'; // Type definitions
 
-// Define interfaces for data structures
-interface FileStatus {
-  id: string;
-  dir?: string;
-  segment?: string;
-  folderPath?: string;
+export interface ActivityLog {
+  id: number;
+  dir: string;
+  segment: string;
   filename: string;
-  filepath: string;
-  fileSize?: string;
-  filetype?: string;
-  spName?: string;
-  spParam?: string;
-  spParamValue?: string;
-  spPath?: string;
-  spStatus?: number;
-  dlStatus: number;
-  ePath?: string;
-  reserved?: string;
-  lastModified?: string;
-  spTime?: string;
-  dlTime?: string;
-  createdTime: string;
-  downloadedAt?: string;
-  importedAt?: string;
+  filetype: string;
+  spName: string;
+  spStatus: number; 
+  dlStatus: number; 
+  lastModified: string;
 }
 
-interface FileStats {
-  totalFiles: number;
-  pendingFiles: number;
-  downloadedFiles: number;
-  importedFiles: number;
-  processingSpeed: string;
-  lastUpdated: string;
-}
-
-interface ActivityLog {
-  id: string;
-  action: string;
-  status: string;
-  timestamp: string;
-  details: string;
-  user: string;
-}
+// API base URL
+const API_BASE = 'http://192.168.1.119:3000/api/automate';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [username, setUsername] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'overview' | 'details'>('overview');
-  const [selectedFileType, setSelectedFileType] = useState<'pending' | 'downloaded' | 'imported' | null>(null);
-  
-  // File status data
-  const [pending, setPending] = useState<FileStatus[]>([]);
-  const [downloaded, setDownloaded] = useState<FileStatus[]>([]);
-  const [imported, setImported] = useState<FileStatus[]>([]);
-  const [downloadCycleMessage, setDownloadCycleMessage] = useState<string>('');
-  
-  // Stats
-  const [stats, setStats] = useState<FileStats>({
+
+  // State definitions
+  const [username, setUsername] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [viewMode, setViewMode] = useState('overview');
+  const [selectedFileType, setSelectedFileType] = useState(null);
+  const [pending, setPending] = useState([]);
+  const [downloaded, setDownloaded] = useState([]);
+  const [imported, setImported] = useState([]);
+  const [downloadCycleMessage, setDownloadCycleMessage] = useState('');
+  const [stats, setStats] = useState({
     totalFiles: 0,
     pendingFiles: 0,
     downloadedFiles: 0,
     importedFiles: 0,
     processingSpeed: '0 files/min',
-    lastUpdated: '--:--'
+    lastUpdated: '--:--',
   });
-  
-  // Activity logs
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  
-  // Format date YYYY-MM-DD
-  const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+  const [activityLogs, setActivityLogs] = useState([]);
+
+  // Timer references
+  const downloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoTriggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Utility function to format date as 'YYYY-MM-DD'
+  const formatDate = (date: Date): string => date.toISOString().split('T')[0];
+
+  // API service functions
+  const fileStatusService = {
+    async getFileStatus() {
+      const response = await fetch(`${API_BASE}/status`);
+      if (!response.ok) throw new Error('Failed to fetch file status');
+      const json = await response.json();
+      if (json.success && Array.isArray(json.data)) {
+        return json.data;
+      } else {
+        throw new Error('Invalid response format');
+      }
+    },
+    async getActivityLogs() {
+      // Placeholder; implement if an endpoint exists
+      return [];
+    },
   };
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (!authService.isAuthenticated()) {
-        router.push('/login');
-        return;
+  const buildTaskService = {
+    async startBuildTask(date: any) {
+      const response = await fetch(`${API_BASE}/buildTask?startDate=${date}&endDate=${date}`);
+      if (!response.ok) throw new Error('Build task failed');
+    },
+  };
+
+  const downloadService = {
+    async startDownload() {
+      const response = await fetch(`${API_BASE}/DownloadFiles`, { method: 'GET' });
+      if (!response.ok) throw new Error('Download failed');
+    },
+  };
+
+  const importService = {
+    async importFiles(files: any[]) {
+      const response = await fetch(`${API_BASE}/ImportFiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(files),
+      });
+      if (!response.ok) throw new Error('Import failed');
+      const json = await response.json();
+      if (json.success && Array.isArray(json.data)) {
+        return json.data;
+      } else {
+        throw new Error('Invalid import response');
       }
+    },
+  };
+
+  // Initialization useEffect
+
+useEffect(() => {
+  const initialize = async () => {
+    // Check authentication
+    if (!authService.isAuthenticated()) {
+      router.push('/login');
+      return;
+    }
+
+    setUsername(authService.getToken()?.substring(0, 8) || 'User');
+    const today = formatDate(new Date());
+    setStartDate(today);
+    setEndDate(today);
+
+    // Load processing state from localStorage
+    const processing = localStorage.getItem('isProcessing') === 'true';
+    setIsProcessing(processing);
+
+    if (processing) {
+      const savedStartDate = localStorage.getItem('fs_startDate') || today;
+      const savedEndDate = localStorage.getItem('fs_endDate') || today;
+      setStartDate(savedStartDate);
+      setEndDate(savedEndDate);
+      triggerGetFileStatus();
+    }
+
+    // Clean and load imported files for today only
+    let importedFiles = JSON.parse(localStorage.getItem('importedFiles') || '[]');
+    importedFiles = importedFiles.filter((f: { createdTime: string | number | Date; }) => formatDate(new Date(f.createdTime)) === today);
+    localStorage.setItem('importedFiles', JSON.stringify(importedFiles));
+    setImported(importedFiles);
+
+    // Fetch initial data
+    await fetchInitialData();
+
+    // Set up timers
+    statusTimerRef.current = setInterval(() => {
+      if (isProcessing) refreshStatus();
+    }, 30000); // Refresh status every 30 seconds
+
+    // Modified: Fix the auto-trigger timer to properly check conditions and start process
+    autoTriggerTimerRef.current = setInterval(async () => {
+      if (isProcessing) return; // Don't start if already processing
       
-      setUsername(authService.getToken()?.substring(0, 8) || 'User');
-      const today = formatDate(new Date());
-      setStartDate(today);
-      setEndDate(today);
-      
-      const processing = localStorage.getItem('isProcessing') === 'true';
-      setIsProcessing(processing);
-      
-      if (processing) {
-        const savedStartDate = localStorage.getItem('fs_startDate') || today;
-        const savedEndDate = localStorage.getItem('fs_endDate') || today;
-        setStartDate(savedStartDate);
-        setEndDate(savedEndDate);
-        triggerGetFileStatus(savedStartDate, savedEndDate);
-      }
-      
-      let imported = JSON.parse(localStorage.getItem('importedFiles') || '[]');
-      imported = imported.filter((f: any) => formatDate(new Date(f.createdTime)) === today);
-      setImported(imported);
-      
-      const statusTimer = setInterval(() => {
-        if (isProcessing) {
-          refreshStatus();
-        }
-      }, 30000);
-      
-      const autoTriggerTimer = setTimeout(() => {
-        if (!isProcessing && !pending.length && !downloaded.length) {
-          // Auto start processing (commented for now)
+      // Get current status to make accurate decisions
+      try {
+        const fileStatuses = await fileStatusService.getFileStatus();
+        const today = formatDate(new Date());
+        const todayFiles = fileStatuses.filter((f: { createdTime: string | number | Date; }) => 
+          formatDate(new Date(f.createdTime)) === today);
+        
+        // Check if there's any pending work to be done
+        const hasIncompleteFiles = todayFiles.some((f: any) => 
+          f.dlStatus !== 200 || (f.dlStatus === 200 && f.spStatus === 404));
+        
+        // Start the process if there's pending work or no files at all
+        if (hasIncompleteFiles || todayFiles.length === 0) {
           triggerStart();
         }
-      }, 300000);
-      
-      fetchInitialData();
-      setLoading(false);
-      
-      return () => {
-        clearInterval(statusTimer);
-        clearTimeout(autoTriggerTimer);
-      };
-    };
-    
-    checkAuth();
-  }, [router]);
+      } catch (error) {
+        console.error("Error checking status for auto-trigger:", error);
+      }
+    }, 180000); // Auto-start check every 3 minutes
 
-  // Fetch initial dashboard data
+    setLoading(false);
+  };
+
+  initialize();
+
+  // Cleanup timers on unmount
+  return () => {
+    if (statusTimerRef.current) clearInterval(statusTimerRef.current);
+    if (autoTriggerTimerRef.current) clearInterval(autoTriggerTimerRef.current);
+    if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
+  };
+}, [router]);
+
+  // Fetch initial data
   const fetchInitialData = async () => {
     try {
-      // Mock data for demo
-      const mockFiles: FileStatus[] = [
-        {
-          id: '001',
-          dir: "common",
-          segment: "FO",
-          folderPath: "/MarketReports/",
-          filename: "F_CN01_NSE_15052025.CSV.gz",
-          filepath: "//FITMINDS/Work/Application_Release/CommonFolderInfluxCRM/AutoDocs",
-          fileSize: '4.2 MB',
-          filetype: "N",
-          spName: "InsertFODataForSelectLOT",
-          spParam: "Module-ModifyUser-ExchangeSegmentID",
-          spParamValue: " -9999-2",
-          spPath: "",
-          spStatus: 404,
-          dlStatus: 404,
-          ePath: "",
-          reserved: "",
-          lastModified: "",
-          spTime: "",
-          dlTime: "",
-          createdTime: new Date().toISOString()
-        },
-        {
-          id: '002',
-          dir: "common",
-          segment: "EQ",
-          folderPath: "/DailyReports/",
-          filename: "EQ_Market_15052025.xlsx",
-          filepath: "//FITMINDS/Work/Application_Release/CommonFolderInfluxCRM/AutoDocs/EQ",
-          fileSize: '2.8 MB',
-          filetype: "E",
-          spName: "ProcessEQMarketData",
-          spParam: "Module-ExchangeID",
-          spParamValue: " -1",
-          spPath: "",
-          spStatus: 0,
-          dlStatus: 200,
-          ePath: "",
-          reserved: "",
-          lastModified: "",
-          spTime: "",
-          dlTime: new Date().toISOString(),
-          createdTime: new Date().toISOString(),
-          downloadedAt: new Date().toISOString()
-        },
-        {
-          id: '003',
-          dir: "reports",
-          segment: "CD",
-          folderPath: "/Analytics/",
-          filename: "CD_TRADING_15052025.csv",
-          filepath: "//FITMINDS/Work/Application_Release/CommonFolderInfluxCRM/AutoDocs/CD",
-          fileSize: '1.5 MB',
-          filetype: "C",
-          spName: "ImportCDTradingData",
-          spParam: "Module-ReportDate",
-          spParamValue: " -20250515",
-          spPath: "",
-          spStatus: 200,
-          dlStatus: 200,
-          ePath: "",
-          reserved: "",
-          lastModified: "",
-          spTime: new Date(new Date().getTime() - 5*60000).toISOString(),
-          dlTime: new Date(new Date().getTime() - 15*60000).toISOString(),
-          createdTime: new Date().toISOString(),
-          downloadedAt: new Date().toISOString(),
-          importedAt: new Date().toISOString()
-        },
-      ];
-      
-      const pending = mockFiles.filter(f => f.dlStatus !== 200);
-      const downloaded = mockFiles.filter(f => f.dlStatus === 200 && f.spStatus !== 200);
-      const imported = mockFiles.filter(f => f.spStatus === 200);
-      
-      setPending(pending);
-      setDownloaded(downloaded);
-      setImported(imported);
-      
-      setStats({
-        totalFiles: mockFiles.length,
-        pendingFiles: pending.length,
-        downloadedFiles: downloaded.length,
-        importedFiles: imported.length,
-        processingSpeed: '6.7 files/min',
-        lastUpdated: new Date().toLocaleTimeString()
-      });
-      
-      const mockLogs: ActivityLog[] = [
-        {
-          id: 'log1',
-          action: 'Download Started',
-          status: 'Completed',
-          timestamp: new Date().toISOString(),
-          details: 'Started downloading 12 files',
-          user: username
-        },
-        {
-          id: 'log3',
-          action: 'Import Files',
-          status: 'In Progress',
-          timestamp: new Date(new Date().getTime() - 10*60000).toISOString(),
-          details: 'Importing 8 files to the system',
-          user: username
-        }
-      ];
-      
-      setActivityLogs(mockLogs);
-      
-    } catch (error) {
-      console.error('Error fetching initial data:', error);
-      toast.error('Failed to load dashboard data');
-    }
-  };
-  
-  const refreshStatus = () => {
-    triggerGetFileStatus(startDate, endDate);
-  };
-  
-  const triggerGetFileStatus = async (start: string, end: string) => {
-    try {
-      const allFiles = await fileStatusService.getFileStatus(start, end);
-      const today = formatDate(new Date());
-      const all = allFiles.filter(f => formatDate(new Date(f.createdTime)) === today);
-      
-      const newPending = all.filter(f => f.dlStatus !== 200);
-      const newDownloaded = all.filter(f => f.dlStatus === 200 && f.spStatus !== 200);
-      const newImported = all.filter(f => f.spStatus === 200);
-      
-      setPending(newPending);
-      setDownloaded(newDownloaded);
-      setImported(newImported);
-      
-      setStats({
-        ...stats,
-        pendingFiles: newPending.length,
-        downloadedFiles: newDownloaded.length,
-        importedFiles: newImported.length,
-        lastUpdated: new Date().toLocaleTimeString()
-      });
-      
-      if (newPending.length > 0) {
-        startDownload();
-      } else {
-        startBuildTask();
-      }
-      
+      const fileStatuses = await fileStatusService.getFileStatus();
+      updateFileStates(fileStatuses);
+      updateStats(fileStatuses);
+      const logs = await fileStatusService.getActivityLogs();
+      setActivityLogs(logs);
     } catch (error) {
       handleError(error);
     }
   };
-  
-  const startBuildTask = async () => {
-    try {
-      await buildTaskService.startBuildTask(startDate, endDate);
-      toast.success('Build task initiated');
+
+  // Refresh status
+  const refreshStatus = () => triggerGetFileStatus();
+
+  // Core process logic
+const triggerGetFileStatus = async () => {
+  try {
+    const fileStatuses = await fileStatusService.getFileStatus();
+    const today = formatDate(new Date());
+    const todayFiles = fileStatuses.filter((f: { createdTime: string | number | Date; }) => formatDate(new Date(f.createdTime)) === today);
+
+    updateFileStates(todayFiles);
+    updateStats(todayFiles);
+
+    if (todayFiles.length === 0) {
+      await startBuildTask(today);
+    } else if (todayFiles.some((f: { dlStatus: number; }) => f.dlStatus !== 200)) {
       startDownload();
+    } else if (todayFiles.some((f: { dlStatus: number; spStatus: number; }) => f.dlStatus === 200 && f.spStatus === 404)) {
+      // Changed: Instead of just setting a message, actually start the import process
+      setDownloadCycleMessage('Ready to import');
+      startImport(); // <-- Add this line to automatically trigger import
+    } else {
+      setIsProcessing(false);
+      localStorage.removeItem('isProcessing');
+      toast.success('All files have been processed');
+    }
+  } catch (error) {
+    handleError(error);
+  }
+};
+  // Update file states based on status
+  const updateFileStates = (fileStatuses: any[]) => {
+    const today = formatDate(new Date());
+    const all = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
+    
+    // Fixed: Using correct status conditions with number comparison
+    const newPending = all.filter((f) => f.dlStatus !== 200);
+    const newDownloaded = all.filter((f) => f.dlStatus === 200 && f.spStatus === 404);
+    const newImported = all.filter((f) => f.dlStatus === 200 && f.spStatus !== 404);
+
+    setPending(newPending);
+    setDownloaded(newDownloaded);
+    setImported(newImported);
+  };
+
+  // Update statistics
+  const updateStats = (fileStatuses: any[]) => {
+    const today = formatDate(new Date());
+    const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
+    const totalFiles = todayFiles.length;
+    
+    // Fixed: Using correct status conditions with number comparison
+    const pendingFiles = todayFiles.filter((f) => f.dlStatus !== 200).length;
+    const downloadedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus === 404).length;
+    const importedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus !== 404).length;
+
+    const now = new Date();
+    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const recentImported = todayFiles.filter(
+      (f) => f.spStatus !== 404 && new Date(f.lastModified || f.createdTime) > hourAgo
+    );
+    const processingSpeed =
+      recentImported.length > 0 ? `${(recentImported.length / 60).toFixed(1)} files/min` : '0 files/min';
+
+    setStats({
+      totalFiles,
+      pendingFiles,
+      downloadedFiles,
+      importedFiles,
+      processingSpeed,
+      lastUpdated: now.toLocaleTimeString(),
+    });
+  };
+
+  // Build task for today
+  const startBuildTask = async (date: string) => {
+    try {
+      setDownloadCycleMessage('Building task...');
+      await buildTaskService.startBuildTask(date);
+      toast.success('Build task initiated');
+      setTimeout(() => triggerGetFileStatus(), 3000); // Wait 3 seconds then check status
     } catch (error) {
       handleError(error);
     }
   };
-  
+
+  // Start download process with polling
   const startDownload = async () => {
     try {
-      await downloadService.startDownload();
       setDownloadCycleMessage('Download cycle in progress...');
-      setTimeout(() => {
-        setDownloadCycleMessage('Download cycle ended');
-        setIsProcessing(false);
-        localStorage.removeItem('isProcessing');
-        startImport();
-      }, 5000);
+      await downloadService.startDownload();
+
+      if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
+      downloadTimerRef.current = setInterval(async () => {
+        const fileStatuses = await fileStatusService.getFileStatus();
+        const today = formatDate(new Date());
+        const todayFiles = fileStatuses.filter((f: { createdTime: string | number | Date; }) => formatDate(new Date(f.createdTime)) === today);
+
+        updateFileStates(todayFiles);
+        updateStats(todayFiles);
+
+        const stillPending = todayFiles.some((f: { dlStatus: number; }) => f.dlStatus !== 200);
+        if (!stillPending) {
+          clearInterval(downloadTimerRef.current);
+          setDownloadCycleMessage('Download cycle ended');
+          
+          // Fixed: Using number comparison (404) instead of string ('404')
+          if (todayFiles.some((f: { dlStatus: number; spStatus: number; }) => f.dlStatus === 200 && f.spStatus === 404)) {
+            setDownloadCycleMessage('Ready to import');
+          } else {
+            setIsProcessing(false);
+            localStorage.removeItem('isProcessing');
+            toast.success('All files processed successfully');
+          }
+        }
+      }, 5000); // Poll every 5 seconds
     } catch (error) {
       handleError(error);
     }
   };
-  
+
+  // Start import process
   const startImport = async () => {
     try {
       if (downloaded.length === 0) {
@@ -333,78 +329,108 @@ export default function Dashboard() {
         return;
       }
       
-      const updatedImported = await importService.importFiles(downloaded);
+      setDownloadCycleMessage('Importing files...');
+      const filesToImport = downloaded.map((file) => ({ ...file }));
+      const importedResults = await importService.importFiles(filesToImport);
+
+      // After import, trigger a status refresh to see if spStatus has been updated
+      await triggerGetFileStatus();
+      
+      // Update localStorage with newly imported files
+      const existingImported = JSON.parse(localStorage.getItem('importedFiles') || '[]');
+      const today = formatDate(new Date());
+      
+      // Only include files where spStatus is no longer 404 (successfully imported)
+      const newlyImported = importedResults.filter(f => f.spStatus !== 404);
+      
+      const updatedImported = [
+        ...existingImported.filter((f) => formatDate(new Date(f.createdTime)) === today),
+        ...newlyImported,
+      ];
+      
       localStorage.setItem('importedFiles', JSON.stringify(updatedImported));
-      setImported(updatedImported);
-      setDownloaded([]);
+
+      setDownloadCycleMessage('Import complete');
       
-      setStats({
-        ...stats,
-        downloadedFiles: 0,
-        importedFiles: updatedImported.length,
-        lastUpdated: new Date().toLocaleTimeString()
-      });
+      // Only set processing to false if all files have been imported
+      const fileStatuses = await fileStatusService.getFileStatus();
+      const todayFiles = fileStatuses.filter((f: { createdTime: string | number | Date; }) => formatDate(new Date(f.createdTime)) === today);
+      const allImported = !todayFiles.some((f: { dlStatus: number; spStatus: number; }) => f.dlStatus === 200 && f.spStatus === 404);
       
-      toast.success(`Successfully imported ${downloaded.length} files`);
+      if (allImported) {
+        setIsProcessing(false);
+        localStorage.removeItem('isProcessing');
+      }
       
+      toast.success(`Successfully imported ${newlyImported.length} files`);
     } catch (error) {
       handleError(error);
     }
   };
-  
-  const handleError = (error: any) => {
-    if (error.status === 401) {
+
+  // Error handler
+  const handleError = (error) => {
+    if (error.status === 401 || (error.message && error.message.includes('Authentication'))) {
       toast.error('Authentication failed. Please login again.');
       router.push('/login');
-      return;
+    } else {
+      toast.error(`Error: ${error.message || 'Unknown error'}`);
     }
-    toast.error(`Error: ${error.message || 'Unknown error'}`);
     setIsProcessing(false);
     localStorage.removeItem('isProcessing');
+    if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
   };
-  
+
+  // Trigger start process
   const triggerStart = () => {
-    if (!startDate || !endDate) {
-      toast.error('Please select valid dates');
-      return;
-    }
-    
     if (isProcessing) {
       toast.error('Process already running');
       return;
     }
-    
     localStorage.setItem('isProcessing', 'true');
     localStorage.setItem('fs_startDate', startDate);
     localStorage.setItem('fs_endDate', endDate);
-    
     setIsProcessing(true);
     toast.success('Process started');
-    triggerGetFileStatus(startDate, endDate);
+    triggerGetFileStatus();
   };
-  
+
+  // Cancel process
   const cancelProcess = () => {
+    if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
     setIsProcessing(false);
+    setDownloadCycleMessage('');
     localStorage.removeItem('isProcessing');
     localStorage.removeItem('fs_startDate');
     localStorage.removeItem('fs_endDate');
     toast.success('Process canceled');
   };
-  
-  const showFileDetails = (type: 'pending' | 'downloaded' | 'imported') => {
+
+  // View mode handlers
+  const showFileDetails = (type) => {
     setViewMode('details');
     setSelectedFileType(type);
   };
-  
+
   const backToOverview = () => {
     setViewMode('overview');
     setSelectedFileType(null);
   };
-  
-  const openContainingFolder = (filepath: string) => {
+
+  const openContainingFolder = (filepath: any) => {
     toast.success(`Opening folder: ${filepath}`);
   };
-  
+
+
+
+
+
+
+
+
+
+
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -416,11 +442,11 @@ export default function Dashboard() {
       </div>
     );
   }
-  
+
   return (
     <div className="w-full min-h-auto bg-gradient-to-br from-blue-50 to-indigo-100 transition-all duration-300 ease-in-out">
-      <Toaster 
-        position="top-right" 
+      <Toaster
+        position="top-right"
         toastOptions={{
           style: {
             background: 'rgba(255, 255, 255, 0.95)',
@@ -443,7 +469,7 @@ export default function Dashboard() {
           },
         }}
       />
-      
+
       <div className="w-full px-6 py-6 transition-all duration-300 ease-in-out">
         <div className="mb-6">
           <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
@@ -453,14 +479,14 @@ export default function Dashboard() {
             Monitor downloads, imports, and processing status
           </p>
         </div>
-        
+
         {viewMode === 'overview' ? (
           <div className="space-y-8">
-            {/* Controls Section with 3D Effect */}
+            {/* Controls Section */}
             <div className="bg-white rounded-2xl p-1 transform transition-all duration-300 hover:scale-[1.01] shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)]">
               <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl overflow-hidden">
                 <div className="p-6">
-                  <Controls 
+                  <Controls
                     startDate={startDate}
                     endDate={endDate}
                     setStartDate={setStartDate}
@@ -474,17 +500,15 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            
-            {/* Stats Cards with Enhanced 3D look */}
+
+            {/* Stats Cards */}
             <div className="transform transition-all duration-300">
-              <StatsCards 
-                stats={stats} 
-              />
+              <StatsCards stats={stats} />
             </div>
-            
-            {/* Main Content Grid with 3D Cards */}
+
+            {/* Main Content Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* File Status Overview - Spans 2 columns on large screens */}
+              {/* File Status Overview */}
               <div className="xl:col-span-2 bg-white rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)] overflow-hidden transform transition-all duration-300 hover:shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] hover:translate-y-[-5px]">
                 <div className="p-6">
                   <h2 className="text-xl font-bold mb-4 flex items-center text-blue-800">
@@ -493,16 +517,15 @@ export default function Dashboard() {
                     </svg>
                     File Status Overview
                   </h2>
-                  <FileStatusOverview 
+                  <FileStatusOverview
                     pending={pending}
                     downloaded={downloaded}
                     imported={imported}
-                    onShowDetails={showFileDetails}
                     onOpenFolder={openContainingFolder}
                   />
                 </div>
               </div>
-              
+
               {/* Activity Log */}
               <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)] overflow-hidden transform transition-all duration-300 hover:shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] hover:translate-y-[-5px]">
                 <div className="p-6">
@@ -516,7 +539,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            
+
             {/* System Status & Performance Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               {/* Performance Card */}
@@ -539,7 +562,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-              
+
               {/* System Status Card */}
               <div className="bg-white rounded-2xl p-6 shadow-[0_10px_25px_rgba(8,_112,_184,_0.1)] transform transition-all duration-300 hover:shadow-[0_15px_30px_rgba(8,_112,_184,_0.2)] hover:translate-y-[-5px]">
                 <h3 className="text-lg font-medium mb-2 text-gray-800 flex items-center">
@@ -554,7 +577,7 @@ export default function Dashboard() {
                 </div>
                 <p className="text-sm text-gray-500 mt-2">Last updated: {stats.lastUpdated}</p>
               </div>
-              
+
               {/* Today's Files Card */}
               <div className="bg-white rounded-2xl p-6 shadow-[0_10px_25px_rgba(8,_112,_184,_0.1)] transform transition-all duration-300 hover:shadow-[0_15px_30px_rgba(8,_112,_184,_0.2)] hover:translate-y-[-5px]">
                 <h3 className="text-lg font-medium mb-2 text-gray-800 flex items-center">
@@ -566,14 +589,17 @@ export default function Dashboard() {
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-gray-600">Processing Complete</span>
-                    <span className="font-bold text-gray-800">{Math.round((stats.importedFiles / (stats.totalFiles || 1)) * 100)}%</span>
+                   <span className="font-bold text-gray-800">
+  {((stats.importedFiles / (stats.totalFiles || 1)) * 100).toFixed(2)}%
+</span>
+
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
                     <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${Math.round((stats.importedFiles / (stats.totalFiles || 1)) * 100)}%` }}></div>
                   </div>
                 </div>
               </div>
-              
+
               {/* Quick Actions Card */}
               <div className="bg-white rounded-2xl p-6 shadow-[0_10px_25px_rgba(8,_112,_184,_0.1)] transform transition-all duration-300 hover:shadow-[0_15px_30px_rgba(8,_112,_184,_0.2)] hover:translate-y-[-5px]">
                 <h3 className="text-lg font-medium mb-4 text-gray-800 flex items-center">
@@ -583,7 +609,7 @@ export default function Dashboard() {
                   Quick Actions
                 </h3>
                 <div className="space-y-2">
-                  <button 
+                  <button
                     onClick={refreshStatus}
                     className="w-full py-2 px-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg flex items-center justify-center transition-all duration-200"
                   >
@@ -592,7 +618,7 @@ export default function Dashboard() {
                     </svg>
                     Refresh Status
                   </button>
-                  <button 
+                  <button
                     onClick={() => showFileDetails('pending')}
                     className="w-full py-2 px-4 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg flex items-center justify-center transition-all duration-200"
                   >
@@ -607,10 +633,10 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl p-6 shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)] transform transition-all duration-300">
-            <FileDetailsGrid 
+            <FileDetailsGrid
               files={
-                selectedFileType === 'pending' ? pending : 
-                selectedFileType === 'downloaded' ? downloaded : 
+                selectedFileType === 'pending' ? pending :
+                selectedFileType === 'downloaded' ? downloaded :
                 imported
               }
               type={selectedFileType || 'pending'}
@@ -619,8 +645,8 @@ export default function Dashboard() {
             />
           </div>
         )}
-        
-        {/* Footer with system info */}
+
+        {/* Footer */}
         <div className="mt-12 mb-4">
           <div className="text-center text-gray-500 text-sm">
             <p>© 2025 AI Automation Platform • Version 1.2.4 • System Time: {new Date().toLocaleTimeString()}</p>

@@ -1,31 +1,6 @@
 import React from 'react';
 import { ExternalLink, ArrowUpDown, Calendar, Download, Database, Eye } from 'lucide-react';
-
-// Updated to match the FileStatus interface in FileManagement component
-interface FileStatus {
-  id: string;
-  dir?: string;
-  segment?: string;
-  folderPath?: string;
-  filename: string;
-  filepath: string;
-  fileSize?: string;
-  filetype?: string;
-  spName?: string;
-  spParam?: string;
-  spParamValue?: string;
-  spPath?: string;
-  spStatus?: number;
-  dlStatus: number;
-  ePath?: string;
-  reserved?: string;
-  lastModified?: string;
-  spTime?: string;
-  dlTime?: string;
-  createdTime: string;
-  downloadedAt?: string;
-  importedAt?: string;
-}
+import { FileStatus } from '@/components/types';
 
 interface FileTableProps {
   files: FileStatus[];

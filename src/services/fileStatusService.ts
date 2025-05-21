@@ -1,39 +1,16 @@
-import axios from 'axios';
+//services/fileStatusService.ts
 
-export interface FileStatus {
-  id: string;
-  dir?: string;
-  segment?: string;
-  folderPath?: string;
-  filename: string;
-  filepath: string;
-  fileSize?: string;
-  filetype?: string;
-  spName?: string;
-  spParam?: string;
-  spParamValue?: string;
-  spPath?: string;
-  spStatus?: number;
-  dlStatus: number;
-  ePath?: string;
-  reserved?: string;
-  lastModified?: string;
-  spTime?: string;
-  dlTime?: string;
-  createdTime: string;
-  downloadedAt?: string;
-  importedAt?: string;
-}
+import { FileStatus } from '@/components/types';
 
-export const getFileStatus = async (startDate: string, endDate: string): Promise<FileStatus[]> => {
-  try {
-    // API call: GET /api/automate/status?startDate={startDate}&endDate={endDate}
-    const response = await axios.get(`http://192.168.1.130:3000/api/automate/status`, {
-      params: { startDate, endDate }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error getting file status:', error);
-    throw error;
-  }
+export const getAutomationStatus = async (): Promise<any> => {
+  const response = await fetch('http://192.168.1.119:3000/api/automate/status');
+  if (!response.ok) throw new Error('Failed to fetch automation status');
+  return response.json();
+};
+
+// Placeholder for activity logs, will update to accept date later
+export const getActivityLogs = async (): Promise<any[]> => {
+  const response = await fetch('/api/activity-logs');
+  if (!response.ok) throw new Error('Failed to fetch activity logs');
+  return response.json();
 };

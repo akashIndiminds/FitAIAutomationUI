@@ -1,5 +1,5 @@
-// types.ts (create this file if not already present)
-export interface ActivityLog {
+///components/types
+export interface ActivityLogI {
   id: number;
   dir: string;
   segment: string;

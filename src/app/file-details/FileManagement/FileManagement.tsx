@@ -5,6 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import Header from './components/Header';
 import FileGrid from './components/FileGrid';
 import FileTable from './components/FileTable';
+import { FileStatus } from '@/components/types';
+
 import { 
   FileSpreadsheet, 
   FileText, 
@@ -14,30 +16,6 @@ import {
   Upload,
 } from 'lucide-react';
 
-interface FileStatus {
-  id: string;
-  dir?: string;
-  segment?: string;
-  folderPath?: string;
-  filename: string;
-  filepath: string;
-  fileSize?: string;
-  filetype?: string;
-  spName?: string;
-  spParam?: string;
-  spParamValue?: string;
-  spPath?: string;
-  spStatus?: number;
-  dlStatus: number;
-  ePath?: string;
-  reserved?: string;
-  lastModified?: string;
-  spTime?: string;
-  dlTime?: string;
-  createdTime: string;
-  downloadedAt?: string;
-  importedAt?: string;
-}
 
 interface FileManagementProps {
   initialFiles?: FileStatus[];
@@ -56,79 +34,10 @@ export default function FileManagement({
   const pathname = usePathname();
   
   const [files, setFiles] = useState<FileStatus[]>(initialFiles);
-  const [sortField, setSortField] = useState<keyof FileStatus>('createdTime');
+ const [sortField, setSortField] = useState<keyof FileStatus>('createdTime');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
-  
-  const mockFiles: FileStatus[] = useMemo(() => [
-    {
-      id: '1',
-      filename: 'sales_data_2025.csv',
-      filepath: '/path/to/sales_data_2025.csv',
-      segment: 'Sales',
-      dir: '/reports/sales',
-      fileSize: '2.4 MB',
-      dlStatus: 0,
-      createdTime: '2025-05-12T14:22:33',
-    },
-    {
-      id: '2',
-      filename: 'inventory_q1.xlsx',
-      filepath: '/path/to/inventory_q1.xlsx',
-      segment: 'Inventory',
-      dir: '/reports/inventory',
-      fileSize: '3.7 MB',
-      dlStatus: 1,
-      createdTime: '2025-05-10T09:15:22',
-      dlTime: '2025-05-10T09:20:15',
-    },
-    {
-      id: '3',
-      filename: 'customer_data.json',
-      filepath: '/path/to/customer_data.json',
-      segment: 'CRM',
-      dir: '/data/customers',
-      fileSize: '1.2 MB',
-      dlStatus: 2,
-      createdTime: '2025-05-08T16:43:10',
-      dlTime: '2025-05-08T16:50:22',
-      spTime: '2025-05-08T17:05:33',
-    },
-    {
-      id: '4',
-      filename: 'marketing_campaign.xlsx',
-      filepath: '/path/to/marketing_campaign.xlsx',
-      segment: 'Marketing',
-      dir: '/reports/marketing',
-      fileSize: '5.1 MB',
-      dlStatus: 0,
-      createdTime: '2025-05-14T11:33:45',
-    },
-    {
-      id: '5',
-      filename: 'financial_report_q1.pdf',
-      filepath: '/path/to/financial_report_q1.pdf',
-      segment: 'Finance',
-      dir: '/reports/finance',
-      fileSize: '8.3 MB',
-      dlStatus: 1,
-      createdTime: '2025-05-09T10:20:15',
-      dlTime: '2025-05-09T10:30:22',
-    },
-    {
-      id: '6',
-      filename: 'employee_data.csv',
-      filepath: '/path/to/employee_data.csv',
-      segment: 'HR',
-      dir: '/data/employees',
-      fileSize: '3.2 MB',
-      dlStatus: 2,
-      createdTime: '2025-05-07T09:12:33',
-      dlTime: '2025-05-07T09:20:15',
-      spTime: '2025-05-07T09:45:10',
-    }
-  ], []);
   
   const activeType = useMemo(() => {
     if (pathname.includes('pending')) return 'pending';
@@ -137,20 +46,77 @@ export default function FileManagement({
     return defaultType;
   }, [pathname, defaultType]);
   
-  const filteredMockFiles = useMemo(() => {
-    return mockFiles.filter(file => {
-      if (activeType === 'pending') return file.dlStatus === 0;
-      if (activeType === 'downloaded') return file.dlStatus === 1;
-      if (activeType === 'imported') return file.dlStatus === 2;
-      return true;
-    });
-  }, [mockFiles, activeType]);
-  
-  useEffect(() => {
-    if (initialFiles.length === 0) {
-      setFiles(filteredMockFiles);
+  // Fetch files from the API
+  const fetchFiles = async () => {
+    try {
+      const response = await fetch('http://192.168.1.119:3000/api/automate/status');
+      if (!response.ok) {
+        throw new Error('Failed to fetch file statuses');
+      }
+      const data = await response.json();
+      if (data.success) {
+        const fetchedFiles: FileStatus[] = data.data.map((file: any, index: number) => ({
+          ...file,
+          id: `${file.filename}-${index}`, // Generate a unique ID
+        }));
+        setFiles(fetchedFiles);
+      } else {
+        console.error('API returned success: false');
+      }
+    } catch (error) {
+      console.error('Error fetching file statuses:', error);
     }
-  }, [filteredMockFiles, initialFiles.length]);
+  };
+
+  // Fetch data on mount and every 5 seconds
+  useEffect(() => {
+    fetchFiles();
+    const interval = setInterval(fetchFiles, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Determine file type based on dlStatus and spStatus
+  const getFileType = (file: FileStatus): 'pending' | 'downloaded' | 'imported' => {
+    if (file.dlStatus === 404) {
+      return 'pending';
+    } else if (file.dlStatus === 200 && file.spStatus === 404) {
+      return 'downloaded';
+    } else if (file.spStatus !== undefined && file.spStatus !== 404) {
+      return 'imported';
+    }
+    return 'pending'; // Default case
+  };
+
+  // Filter files by activeType
+  const typeFilteredFiles = useMemo(() => {
+    return files.filter(file => getFileType(file) === activeType);
+  }, [files, activeType]);
+
+  // Further filter by search term
+  const searchFilteredFiles = useMemo(() => {
+    return typeFilteredFiles.filter(file => 
+      file.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (file.segment?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (file.dir?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    );
+  }, [typeFilteredFiles, searchTerm]);
+
+  // Sort the filtered files
+  const sortedFiles = useMemo(() => {
+    return [...searchFilteredFiles].sort((a, b) => {
+      if (sortField === 'createdTime' || sortField === 'dlTime' || sortField === 'spTime') {
+        const aValue = a[sortField] ? new Date(a[sortField] as string).getTime() : 0;
+        const bValue = b[sortField] ? new Date(b[sortField] as string).getTime() : 0;
+        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+      } else {
+        const aValue = a[sortField] || '';
+        const bValue = b[sortField] || '';
+        return sortDirection === 'asc' ? 
+          aValue.toString().localeCompare(bValue.toString()) : 
+          bValue.toString().localeCompare(aValue.toString());
+      }
+    });
+  }, [searchFilteredFiles, sortField, sortDirection]);
   
   const getFileIcon = useCallback((filename: string) => {
     const extension = filename.split('.').pop()?.toLowerCase();
@@ -177,28 +143,6 @@ export default function FileManagement({
     const date = new Date(dateString);
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
   }, []);
-  
-  const filteredFiles = useMemo(() => files.filter(file => 
-    file.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (file.segment?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (file.dir?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  ), [files, searchTerm]);
-  
-  const sortedFiles = useMemo(() => {
-    return [...filteredFiles].sort((a, b) => {
-      if (sortField === 'createdTime' || sortField === 'dlTime' || sortField === 'spTime') {
-        const aValue = a[sortField] ? new Date(a[sortField] as string).getTime() : 0;
-        const bValue = b[sortField] ? new Date(b[sortField] as string).getTime() : 0;
-        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
-      } else {
-        const aValue = a[sortField] || '';
-        const bValue = b[sortField] || '';
-        return sortDirection === 'asc' ? 
-          aValue.toString().localeCompare(bValue.toString()) : 
-          bValue.toString().localeCompare(aValue.toString());
-      }
-    });
-  }, [filteredFiles, sortField, sortDirection]);
   
   const getStatusLabel = useCallback((type: 'pending' | 'downloaded' | 'imported') => {
     switch (type) {
@@ -261,16 +205,16 @@ export default function FileManagement({
           formatDate={formatDate}
         />
       ) : (
-       <FileTable
-      files={sortedFiles}
-      activeType={activeType}
-      sortField={sortField}
-      sortDirection={sortDirection}
-      handleSort={handleSort}
-      onOpenFolder={onOpenFolderHandler}
-      getFileIcon={getFileIcon}
-      formatDate={formatDate}
-    />
+        <FileTable
+          files={sortedFiles}
+          activeType={activeType}
+          sortField={sortField}
+          sortDirection={sortDirection}
+          handleSort={handleSort}
+          onOpenFolder={onOpenFolderHandler}
+          getFileIcon={getFileIcon}
+          formatDate={formatDate}
+        />
       )}
     </div>
   );
