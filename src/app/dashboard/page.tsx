@@ -1,13 +1,14 @@
 'use client';
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
-import Controls from './Controls';
-import StatsCards from './StatsCards';
-import FileStatusOverview from './FileStatusOverview';
-import ActivityLog from './ActivityLog';
-import FileDetailsGrid from './FileDetailsGrid';
-import SystemStatusSection from './SystemStatusSection';
-import { useDashboardLogic } from './useDashboardLogic';
+import Controls from './components/Controls';
+import StatsCards from './components/StatsCards';
+import FileStatusOverview from './components/FileStatusOverview';
+import TaskManager from './components/TaskManager'; // Updated import
+import FileDetailsGrid from './components/FileDetailsGrid';
+import SystemStatusSection from './components/SystemStatusSection';
+import { useDashboardLogic } from './components/useDashboardLogic';
+import { authService } from '@/services/authService';
 
 export default function Dashboard() {
   const {
@@ -23,7 +24,7 @@ export default function Dashboard() {
     imported,
     downloadCycleMessage,
     stats,
-    activityLogs,
+    // Remove activityLogs as we're using tasks now
     setStartDate,
     setEndDate,
     refreshStatus,
@@ -33,6 +34,101 @@ export default function Dashboard() {
     backToOverview,
     openContainingFolder,
   } = useDashboardLogic();
+
+  
+  // Create tasks based on current dashboard state
+  const generateTasks = () => {
+    const tasks = [];
+    
+    // Add download task if processing
+    if (isProcessing) {
+      tasks.push({
+        id: 'download-task',
+        title: 'File Download Process',
+        description: `Downloading files from ${startDate} to ${endDate}`,
+        status: 'running' as const,
+        priority: 'high' as const,
+        progress: Math.floor(Math.random() * 60) + 20, // Simulate progress
+        createdAt: new Date().toISOString(),
+        estimatedTime: '5-10 min',
+        fileCount: pending.length
+      });
+    }
+
+    // Add import task if there are downloaded files
+    if (downloaded.length > 0) {
+      tasks.push({
+        id: 'import-task',
+        title: 'Data Import Process',
+        description: 'Importing downloaded files to database',
+        status: imported.length > 0 ? 'completed' as const : 'pending' as const,
+        priority: 'medium' as const,
+        progress: imported.length > 0 ? 100 : 0,
+        createdAt: new Date(Date.now() - 300000).toISOString(),
+        estimatedTime: '3-5 min',
+        fileCount: downloaded.length
+      });
+    }
+
+    // Add validation task
+    if (imported.length > 0) {
+      tasks.push({
+        id: 'validation-task',
+        title: 'File Validation',
+        description: 'Validating file integrity and format',
+        status: 'completed' as const,
+        priority: 'low' as const,
+        progress: 100,
+        createdAt: new Date(Date.now() - 600000).toISOString(),
+        fileCount: imported.length
+      });
+    }
+
+    // Add pending tasks
+    if (pending.length > 0 && !isProcessing) {
+      tasks.push({
+        id: 'pending-task',
+        title: 'Pending File Processing',
+        description: `${pending.length} files waiting to be processed`,
+        status: 'pending' as const,
+        priority: 'medium' as const,
+        progress: 0,
+        createdAt: new Date(Date.now() - 900000).toISOString(),
+        estimatedTime: '2-4 min',
+        fileCount: pending.length
+      });
+    }
+
+    return tasks;
+  };
+
+  const handleTaskAction = (taskId: string, action: 'start' | 'pause' | 'cancel' | 'retry') => {
+    switch (action) {
+      case 'start':
+        if (taskId === 'pending-task' || taskId === 'download-task') {
+          triggerStart();
+        }
+        break;
+      case 'cancel':
+        if (taskId === 'download-task') {
+          cancelProcess();
+        }
+        break;
+      case 'retry':
+        refreshStatus();
+        break;
+      default:
+        console.log(`Task action ${action} for ${taskId}`);
+    }
+  };
+
+  // Helper function to get the correct file type
+  const getFileType = (): 'pending' | 'downloaded' | 'imported' => {
+    if (selectedFileType === 'pending' || selectedFileType === 'downloaded' || selectedFileType === 'imported') {
+      return selectedFileType;
+    }
+    return 'pending'; // Default fallback
+  };
 
   if (loading) {
     return (
@@ -111,7 +207,7 @@ export default function Dashboard() {
                         d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    File Status Overview
+                    Latest File Status 
                   </h2>
                   <FileStatusOverview
                     pending={pending}
@@ -136,12 +232,15 @@ export default function Dashboard() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                       />
                     </svg>
-                    Activity Log
+                    Task Manager 
                   </h2>
-                  <ActivityLog logs={activityLogs} />
+                  <TaskManager 
+                    tasks={generateTasks()} 
+                    onTaskAction={handleTaskAction}
+                  />
                 </div>
               </div>
             </div>
@@ -152,7 +251,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl p-6 shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)] transform transition-all duration-300">
             <FileDetailsGrid
               files={selectedFileType === 'pending' ? pending : selectedFileType === 'downloaded' ? downloaded : imported}
-              type={selectedFileType || 'pending'}
+              type={getFileType()}
               onBack={backToOverview}
               onOpenFolder={openContainingFolder}
             />

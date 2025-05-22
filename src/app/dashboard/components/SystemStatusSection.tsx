@@ -99,8 +99,9 @@ const SystemStatusSection: React.FC<SystemStatusSectionProps> = ({ stats, onRefr
           <div className="flex items-center justify-between mb-2">
             <span className="text-gray-600">Processing Complete</span>
             <span className="font-bold text-gray-800">
-              {((stats.importedFiles / (stats.totalFiles || 1)) * 100).toFixed(2)}%
-            </span>
+  {Math.round((stats.importedFiles / (stats.totalFiles || 1)) * 100)}%
+</span>
+
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5">
             <div

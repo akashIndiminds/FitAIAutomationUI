@@ -16,7 +16,7 @@ interface FileTableProps {
 // Helper function to get file extension badge color
 const getFileBadgeColor = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase();
-  
+
   if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext || '')) return 'bg-purple-100 text-purple-700';
   if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext || '')) return 'bg-pink-100 text-pink-700';
   if (['mp3', 'wav', 'ogg', 'flac'].includes(ext || '')) return 'bg-blue-100 text-blue-700';
@@ -24,7 +24,7 @@ const getFileBadgeColor = (filename: string) => {
   if (['xls', 'xlsx', 'csv'].includes(ext || '')) return 'bg-green-100 text-green-700';
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext || '')) return 'bg-yellow-100 text-yellow-700';
   if (['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'py', 'java'].includes(ext || '')) return 'bg-cyan-100 text-cyan-700';
-  
+
   return 'bg-gray-100 text-gray-700';
 };
 
@@ -36,22 +36,22 @@ const getStatusIndicator = (activeType: string) => {
   return 'border-gray-500 bg-gray-50 text-gray-700';
 };
 
-export default function FileTable({ 
-  files, 
-  activeType, 
-  sortField, 
-  sortDirection, 
-  handleSort, 
-  onOpenFolder, 
-  getFileIcon, 
-  formatDate 
+export default function FileTable({
+  files,
+  activeType,
+  sortField,
+  sortDirection,
+  handleSort,
+  onOpenFolder,
+  getFileIcon,
+  formatDate,
 }: FileTableProps) {
   // Helper to render sort icon
   const renderSortIcon = (field: keyof FileStatus) => {
     if (sortField !== field) {
       return <ArrowUpDown className="h-3 w-3 ml-1 text-gray-400" />;
     }
-    
+
     return (
       <div className="flex items-center ml-1">
         {sortDirection === 'asc' ? (
@@ -69,7 +69,7 @@ export default function FileTable({
 
   // Helper to render table header
   const renderTableHeader = (title: string, field: keyof FileStatus) => (
-    <th 
+    <th
       className="py-4 px-6 text-left cursor-pointer hover:bg-gray-100 transition-colors duration-200"
       onClick={() => handleSort(field)}
     >
@@ -93,10 +93,10 @@ export default function FileTable({
               {renderTableHeader('Directory', 'dir')}
               {renderTableHeader('Size', 'fileSize')}
               {renderTableHeader('Created', 'createdTime')}
-              
+
               {activeType !== 'pending' && renderTableHeader('Downloaded', 'dlTime')}
               {activeType === 'imported' && renderTableHeader('Imported', 'spTime')}
-              
+
               <th className="py-4 px-6 text-center">
                 <span className="font-medium text-xs uppercase tracking-wide text-gray-600">Actions</span>
               </th>
@@ -108,10 +108,10 @@ export default function FileTable({
                 const fileExt = file.filename.split('.').pop() || '';
                 const badgeColor = getFileBadgeColor(file.filename);
                 const statusColor = getStatusIndicator(activeType);
-                
+
                 return (
-                  <tr 
-                    key={file.id} 
+                  <tr
+                    key={file.id}
                     className={`border-b border-gray-100 hover:bg-gray-50 transition-colors duration-200 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
                   >
                     <td className="py-4 px-6 text-left">
@@ -171,13 +171,16 @@ export default function FileTable({
                     )}
                     <td className="py-4 px-6">
                       <div className="flex items-center justify-center space-x-2">
-                        <button
-                          onClick={() => onOpenFolder(file.filepath)}
-                          className="p-2 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors duration-200"
-                          title="Open in folder"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </button>
+                        {/* Conditionally render the "Open in Folder" button */}
+                        {activeType !== 'pending' && (
+                          <button
+                            onClick={() => onOpenFolder(file.filepath)}
+                            className="p-2 rounded-lg text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors duration-200"
+                            title="Open in folder"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           className="p-2 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-50 transition-colors duration-200"
                           title="Preview file"

@@ -6,6 +6,7 @@ import Header from './components/Header';
 import FileGrid from './components/FileGrid';
 import FileTable from './components/FileTable';
 import Pagination from '@/components/Pagination';
+import Loader, { TableLoader, GridLoader} from '@/components/loader'
 import { FileStatus } from '@/components/types';
 import { 
   FileSpreadsheet, 
@@ -37,8 +38,16 @@ export default function FileManagement({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
-  const [currentPage, setCurrentPage] = useState(1); // Add state for current page
+  const [currentPage, setCurrentPage] = useState(1);
   
+  // Loading states
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isTypeChanging, setIsTypeChanging] = useState(false);
+  const [isViewChanging, setIsViewChanging] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  
+  const baseURL=process.env.NEXT_PUBLIC_API_URL;
+
   const activeType = useMemo(() => {
     if (pathname.includes('pending')) return 'pending';
     if (pathname.includes('downloaded')) return 'downloaded';
@@ -47,9 +56,11 @@ export default function FileManagement({
   }, [pathname, defaultType]);
   
   // Fetch files from the API
-  const fetchFiles = async () => {
+  const fetchFiles = async (showLoader = false) => {
     try {
-      const response = await fetch('http://192.168.1.119:3000/api/automate/status');
+      if (showLoader) setIsFetching(true);
+      
+      const response = await fetch(`${baseURL}/api/automate/status`);
       if (!response.ok) {
         throw new Error('Failed to fetch file statuses');
       }
@@ -59,29 +70,80 @@ export default function FileManagement({
           ...file,
           id: `${file.filename}-${index}`,
         }));
+        
+        // Simulate network delay for better UX
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         setFiles(fetchedFiles);
+        setIsInitialLoading(false);
       } else {
         console.error('API returned success: false');
+        setIsInitialLoading(false);
       }
     } catch (error) {
       console.error('Error fetching file statuses:', error);
+      setIsInitialLoading(false);
+    } finally {
+      if (showLoader) setIsFetching(false);
     }
   };
 
+  // Initial load
   useEffect(() => {
     fetchFiles();
-    const interval = setInterval(fetchFiles, 5000);
+    const interval = setInterval(() => fetchFiles(false), 5000); // Background refresh without loader
     return () => clearInterval(interval);
   }, []);
 
+  // Handle type change with loader
+  useEffect(() => {
+    if (!isInitialLoading) {
+      setIsTypeChanging(true);
+      // Simulate loading delay for type change
+      const timer = setTimeout(() => {
+        setIsTypeChanging(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [activeType, isInitialLoading]);
+
+  // Handle view mode change with loader
+  const handleViewModeChange = useCallback((newViewMode: 'grid' | 'table') => {
+    if (newViewMode !== viewMode) {
+      setIsViewChanging(true);
+      setTimeout(() => {
+        setViewMode(newViewMode);
+        setTimeout(() => {
+          setIsViewChanging(false);
+        }, 600);
+      }, 200);
+    }
+  }, [viewMode]);
+
+  // Fixed getFileType function - this was the main issue
   const getFileType = (file: FileStatus): 'pending' | 'downloaded' | 'imported' => {
+    // If download status is 404, file is pending
     if (file.dlStatus === 404) {
       return 'pending';
-    } else if (file.dlStatus === 200 && file.spStatus === 404) {
+    }
+    
+    // If download status is 200 (downloaded successfully)
+    if (file.dlStatus === 200) {
+      // Check if it's also imported (spStatus exists and is not 404)
+      if (file.spStatus && file.spStatus !== 404) {
+        return 'imported';
+      }
+      // If downloaded but not imported, it's in downloaded state
       return 'downloaded';
-    } else if (file.spStatus !== undefined && file.spStatus !== 404) {
+    }
+    
+    // Default case - if dlStatus is neither 404 nor 200
+    // Check if it has spStatus (imported) without being downloaded
+    if (file.spStatus && file.spStatus !== 404) {
       return 'imported';
     }
+    
+    // Default to pending if status is unclear
     return 'pending';
   };
 
@@ -179,10 +241,10 @@ export default function FileManagement({
   }, []);
   
   const handleTypeChange = useCallback((type: 'pending' | 'downloaded' | 'imported') => {
-    if (router) {
+    if (router && activeType !== type) {
       router.push(`/file-details/${type}`);
     }
-  }, [router]);
+  }, [router, activeType]);
   
   const onOpenFolderHandler = useCallback((filepath: string) => {
     if (propOnOpenFolder) {
@@ -199,6 +261,22 @@ export default function FileManagement({
       router.push('/dashboard');
     }
   }, [onBack, router]);
+
+  // Show initial loading
+  if (isInitialLoading) {
+    return (
+      <div className="w-full rounded-lg shadow-md bg-white">
+        <div className="p-6 border-b border-gray-200">
+          <div className="h-16 bg-gray-100 rounded animate-pulse"></div>
+        </div>
+        <Loader 
+          size="lg" 
+          text="Loading file management system..." 
+          className="min-h-96"
+        />
+      </div>
+    );
+  }
   
   return (
     <div className="w-full rounded-lg shadow-md">
@@ -206,7 +284,7 @@ export default function FileManagement({
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         viewMode={viewMode}
-        setViewMode={setViewMode}
+        setViewMode={handleViewModeChange}
         activeType={activeType}
         handleTypeChange={handleTypeChange}
         fileCount={sortedFiles.length}
@@ -214,9 +292,19 @@ export default function FileManagement({
         getStatusLabel={getStatusLabel}
         getStatusIcon={getStatusIcon}
       />
-      {viewMode === 'grid' ? (
+      
+      {/* Show different loaders based on state */}
+      {isTypeChanging ? (
+        <div className="relative">
+          {viewMode === 'grid' ? <GridLoader /> : <TableLoader />}
+        </div>
+      ) : isViewChanging ? (
+        <div className="relative">
+          {viewMode === 'grid' ? <GridLoader /> : <TableLoader />}
+        </div>
+      ) : viewMode === 'grid' ? (
         <FileGrid
-          files={currentFiles} // Use currentFiles instead of sortedFiles
+          files={currentFiles}
           activeType={activeType}
           onOpenFolder={onOpenFolderHandler}
           getFileIcon={getFileIcon}
@@ -224,7 +312,7 @@ export default function FileManagement({
         />
       ) : (
         <FileTable
-          files={currentFiles} // Use currentFiles instead of sortedFiles
+          files={currentFiles}
           activeType={activeType}
           sortField={sortField}
           sortDirection={sortDirection}
@@ -234,12 +322,24 @@ export default function FileManagement({
           formatDate={formatDate}
         />
       )}
-      <Pagination
-        totalFiles={sortedFiles.length}
-        filesPerPage={filesPerPage}
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-      />
+      
+      {/* Only show pagination when not loading */}
+      {!isTypeChanging && !isViewChanging && (
+        <Pagination
+          totalFiles={sortedFiles.length}
+          filesPerPage={filesPerPage}
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+        />
+      )}
+      
+      {/* Background loading indicator for data refresh */}
+      {isFetching && (
+        <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
+          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm">Refreshing data...</span>
+        </div>
+      )}
     </div>
   );
 }

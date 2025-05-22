@@ -1,8 +1,8 @@
-const baseUrl = 'http://192.168.1.119:3000/api/automate';
+const baseURL = process.env.NEXT_PUBLIC_API_URL;
 
 export const getFileConfigurations = async () => {
   try {
-    const response = await fetch(`${baseUrl}/getDB`);
+    const response = await fetch(`${baseURL}/api/automate/getDB`);
     const data = await response.json();
     if (data.success) {
       return data.data;
@@ -17,7 +17,7 @@ export const getFileConfigurations = async () => {
 
 export const getSelectedConfigurations = async () => {
   try {
-    const response = await fetch(`${baseUrl}/getConfig`);
+    const response = await fetch(`${baseURL}/getConfig`);
     const data = await response.json();
     if (data.success) {
       return data.data;
@@ -32,7 +32,7 @@ export const getSelectedConfigurations = async () => {
 
 export const createConfiguration = async (selectedIds: number[]) => {
   try {
-    const response = await fetch(`${baseUrl}/buildConfig`, {
+    const response = await fetch(`${baseURL}/buildConfig`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

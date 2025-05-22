@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import authService from '@/services/authService';
 import { FileStatus, FileStats } from '@/components/types';
 
-const API_BASE = 'http://192.168.1.119:3000/api/automate';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL+'/api/automate/';
 
 interface Stats {
   totalFiles: number;
@@ -226,39 +226,45 @@ const importService = {
     }
   };
 
-  const updateFileStates = (fileStatuses: FileStatus[]) => {
+const updateFileStates = (fileStatuses: FileStatus[]) => {
     const today = formatDate(new Date());
     const all = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
+    
+    // Pending: files that are not downloaded yet (dlStatus !== 200)
     setPending(all.filter((f) => f.dlStatus !== 200));
-    setDownloaded(all.filter((f) => f.dlStatus === 200 && f.spStatus === 404));
+    
+    // Downloaded: files that are downloaded (dlStatus === 200) - regardless of import status
+    setDownloaded(all.filter((f) => f.dlStatus === 200));
+    
+    // Imported: files that are downloaded AND imported (dlStatus === 200 AND spStatus !== 404)
     setImported(all.filter((f) => f.dlStatus === 200 && f.spStatus !== 404));
   };
 
   const updateStats = (fileStatuses: FileStatus[]) => {
-    const today = formatDate(new Date());
-    const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
-    const totalFiles = todayFiles.length;
-    const pendingFiles = todayFiles.filter((f) => f.dlStatus !== 200).length;
-    const downloadedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus === 404).length;
-    const importedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus !== 404).length;
+  const today = formatDate(new Date());
+  const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
+  const totalFiles = todayFiles.length;
+  const pendingFiles = todayFiles.filter((f) => f.dlStatus !== 200).length;
+  const downloadedFiles = todayFiles.filter((f) => f.dlStatus === 200).length; // Updated to count all downloaded files
+  const importedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus !== 404).length;
 
-    const now = new Date();
-    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const recentImported = todayFiles.filter(
-      (f) => f.spStatus !== 404 && new Date(f.lastModified || f.createdTime) > hourAgo
-    );
-    const processingSpeed =
-      recentImported.length > 0 ? `${(recentImported.length / 60).toFixed(1)} files/min` : '0 files/min';
+  const now = new Date();
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const recentImported = todayFiles.filter(
+    (f) => f.spStatus !== 404 && new Date(f.lastModified || f.createdTime) > hourAgo
+  );
+  const processingSpeed =
+    recentImported.length > 0 ? `${(recentImported.length / 60).toFixed(1)} files/min` : '0 files/min';
 
-    setStats({
-      totalFiles,
-      pendingFiles,
-      downloadedFiles,
-      importedFiles,
-      processingSpeed,
-      lastUpdated: now.toLocaleTimeString(),
-    });
-  };
+  setStats({
+    totalFiles,
+    pendingFiles,
+    downloadedFiles,
+    importedFiles,
+    processingSpeed,
+    lastUpdated: now.toLocaleTimeString(),
+  });
+};
 
   const startBuildTask = async (date: string) => {
     try {
@@ -309,7 +315,7 @@ const importService = {
       } catch (error) {
         console.error('Import cycle error:', error);
       }
-    }, 10000); // Check every 10 seconds for files to import
+    }, 30000); // Check every 10 seconds for files to import
   };
 
   const startDownload = async () => {

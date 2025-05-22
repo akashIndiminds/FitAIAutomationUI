@@ -17,7 +17,7 @@ interface FileGridProps {
   files: FileStatus[];
   activeType: 'pending' | 'downloaded' | 'imported';
   onOpenFolder: (filepath: string) => void;
-  getFileIcon: (filename: string) => React.ReactNode; // Changed from JSX.Element to React.ReactNode
+  getFileIcon: (filename: string) => React.ReactNode;
   formatDate: (dateString?: string) => string;
 }
 
@@ -27,7 +27,7 @@ export default function FileGrid({ files, activeType, onOpenFolder, getFileIcon,
       {files.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {files.map((file) => (
-            <div 
+            <div
               key={file.id}
               className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
             >
@@ -46,7 +46,7 @@ export default function FileGrid({ files, activeType, onOpenFolder, getFileIcon,
                   </div>
                 </div>
               </div>
-              
+
               <div className="px-4 py-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
@@ -61,7 +61,7 @@ export default function FileGrid({ files, activeType, onOpenFolder, getFileIcon,
                       {formatDate(file.createdTime).split(' ')[0]}
                     </p>
                   </div>
-                  
+
                   {activeType !== 'pending' && (
                     <div>
                       <span className="text-gray-500">Downloaded:</span>
@@ -70,7 +70,7 @@ export default function FileGrid({ files, activeType, onOpenFolder, getFileIcon,
                       </p>
                     </div>
                   )}
-                  
+
                   {activeType === 'imported' && (
                     <div>
                       <span className="text-gray-500">Imported:</span>
@@ -81,16 +81,19 @@ export default function FileGrid({ files, activeType, onOpenFolder, getFileIcon,
                   )}
                 </div>
               </div>
-              
-              <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 rounded-b-lg">
-                <button
-                  onClick={() => onOpenFolder(file.filepath)}
-                  className="w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800"
-                >
-                  <ExternalLink className="h-4 w-4 mr-1" />
-                  <span>Open In Folder</span>
-                </button>
-              </div>
+
+              {/* Conditionally render the "Open in Folder" button */}
+              {activeType !== 'pending' && (
+                <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 rounded-b-lg">
+                  <button
+                    onClick={() => onOpenFolder(file.filepath)}
+                    className="w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    <span>Open In Folder</span>
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

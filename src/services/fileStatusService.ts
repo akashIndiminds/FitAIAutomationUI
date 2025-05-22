@@ -1,9 +1,10 @@
 //services/fileStatusService.ts
 
 import { FileStatus } from '@/components/types';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 export const getAutomationStatus = async (): Promise<any> => {
-  const response = await fetch('http://192.168.1.119:3000/api/automate/status');
+  const response = await fetch(`${API_BASE}/api/automate/status`);
   if (!response.ok) throw new Error('Failed to fetch automation status');
   return response.json();
 };

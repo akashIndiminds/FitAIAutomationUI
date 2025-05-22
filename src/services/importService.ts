@@ -1,8 +1,9 @@
 //services/importService.ts
 import { FileStatus } from '@/components/types';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
 export const importFiles = async (files: FileStatus[]): Promise<FileStatus[]> => {
-  const response = await fetch('http://192.168.1.119:3000/api/import', {
+  const response = await fetch(`${API_BASE}/api/automate/import`, {
     method: 'GET',
     body: JSON.stringify(files),
   });

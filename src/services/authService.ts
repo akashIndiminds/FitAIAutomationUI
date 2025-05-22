@@ -1,7 +1,7 @@
 // services/authService.ts
 import axios, { AxiosInstance } from 'axios';
 import { getCookie, setCookie, deleteCookie } from 'cookies-next';
-import { config } from '@/app/config/appconfig';
+import { config } from '@/config/appconfig';
 
 export interface LoginCredentials {
   loginId: string;

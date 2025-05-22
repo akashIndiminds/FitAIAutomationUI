@@ -1,5 +1,5 @@
 ///components/types
-export interface ActivityLogI {
+export interface ActivityLog {
   id: number;
   dir: string;
   segment: string;
