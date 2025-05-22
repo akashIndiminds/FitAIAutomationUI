@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, ArrowUpDown, Calendar, Download, Database, Eye } from 'lucide-react';
+import { ExternalLink, ArrowUpDown, Calendar, Download, Database, Eye, Upload } from 'lucide-react';
 import { FileStatus } from '@/components/types';
 
 interface FileTableProps {
@@ -28,12 +28,20 @@ const getFileBadgeColor = (filename: string) => {
   return 'bg-gray-100 text-gray-700';
 };
 
-// Helper function to determine status indicator
+// Helper function to determine status indicator based on activeType
 const getStatusIndicator = (activeType: string) => {
   if (activeType === 'pending') return 'border-yellow-500 bg-yellow-50 text-yellow-700';
   if (activeType === 'downloaded') return 'border-blue-500 bg-blue-50 text-blue-700';
   if (activeType === 'imported') return 'border-green-500 bg-green-50 text-green-700';
   return 'border-gray-500 bg-gray-50 text-gray-700';
+};
+
+// Helper function to get status text based on activeType
+const getStatusText = (activeType: string) => {
+  if (activeType === 'pending') return 'Pending';
+  if (activeType === 'downloaded') return 'Downloaded';
+  if (activeType === 'imported') return 'Imported';
+  return activeType;
 };
 
 export default function FileTable({
@@ -89,6 +97,9 @@ export default function FileTable({
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {renderTableHeader('Filename', 'filename')}
+              <th className="py-4 px-6 text-left">
+                <span className="font-medium text-xs uppercase tracking-wide text-gray-600">Status</span>
+              </th>
               {renderTableHeader('Segment', 'segment')}
               {renderTableHeader('Directory', 'dir')}
               {renderTableHeader('Size', 'fileSize')}
@@ -108,6 +119,7 @@ export default function FileTable({
                 const fileExt = file.filename.split('.').pop() || '';
                 const badgeColor = getFileBadgeColor(file.filename);
                 const statusColor = getStatusIndicator(activeType);
+                const statusText = getStatusText(activeType);
 
                 return (
                   <tr
@@ -128,8 +140,13 @@ export default function FileTable({
                       </div>
                     </td>
                     <td className="py-4 px-6 text-left">
+                      <span className={`px-3 py-1 rounded-full text-xs border ${statusColor} font-medium`}>
+                        {statusText}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-left">
                       {file.segment ? (
-                        <span className={`px-3 py-1 rounded-full text-xs border ${statusColor}`}>
+                        <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">
                           {file.segment}
                         </span>
                       ) : (
@@ -156,7 +173,7 @@ export default function FileTable({
                     {activeType !== 'pending' && (
                       <td className="py-4 px-6 text-left">
                         <div className="flex items-center">
-                          <Download className="h-3 w-3 text-gray-400 mr-2" />
+                          <Download className="h-3 w-3 text-blue-400 mr-2" />
                           <span>{formatDate(file.dlTime)}</span>
                         </div>
                       </td>
@@ -164,7 +181,7 @@ export default function FileTable({
                     {activeType === 'imported' && (
                       <td className="py-4 px-6 text-left">
                         <div className="flex items-center">
-                          <Database className="h-3 w-3 text-gray-400 mr-2" />
+                          <Upload className="h-3 w-3 text-green-400 mr-2" />
                           <span>{formatDate(file.spTime)}</span>
                         </div>
                       </td>
@@ -194,7 +211,7 @@ export default function FileTable({
               })
             ) : (
               <tr>
-                <td colSpan={activeType === 'imported' ? 8 : activeType === 'downloaded' ? 7 : 6} className="py-12 text-center">
+                <td colSpan={activeType === 'imported' ? 9 : activeType === 'downloaded' ? 8 : 7} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div className="bg-gray-50 rounded-full p-4">
                       <svg className="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

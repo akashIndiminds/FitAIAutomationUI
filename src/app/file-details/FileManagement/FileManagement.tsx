@@ -123,6 +123,8 @@ export default function FileManagement({
   // Fixed getFileType function - this was the main issue
   const getFileType = (file: FileStatus): 'pending' | 'downloaded' | 'imported' => {
     // If download status is 404, file is pending
+
+   
     if (file.dlStatus === 404) {
       return 'pending';
     }
@@ -224,11 +226,12 @@ export default function FileManagement({
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
   }, []);
   
+  // Updated getStatusLabel function to show correct status for each section
   const getStatusLabel = useCallback((type: 'pending' | 'downloaded' | 'imported') => {
     switch (type) {
-      case 'pending': return 'Pending Download';
-      case 'downloaded': return 'Downloaded (Pending Import)';
-      case 'imported': return 'Imported Successfully';
+      case 'pending': return 'Pending';
+      case 'downloaded': return 'Downloaded';
+      case 'imported': return 'Imported';
     }
   }, []);
   
