@@ -9,6 +9,8 @@ import LoginCard from './components/LoginCard';
 import Logo from './components/Logo';
 import LoginForm from './components/LoginForm';
 import SystemBlockedMessage from './components/SystemBlockedMessage';
+import {getSelectedConfigurations} from '@/services/fileConfigService';
+
 
 export default function LoginPage() {
   const [loginId, setLoginId] = useState('');
@@ -118,32 +120,52 @@ export default function LoginPage() {
     }
   };
 
-  const finalizeLogin = async (nseResponseCode: number) => {
-    try {
-      setLoginStatus('Completing login process...');
-      
-      const response = await authService.completeLoginProcess(loginId, password, nseResponseCode);
+const finalizeLogin = async (nseResponseCode: number) => {
+  try {
+    setLoginStatus('Completing login process...');
+    
+    const response = await authService.completeLoginProcess(loginId, password, nseResponseCode);
 
-      if (response.ResponseCode === 200) {
-        setLoginStatus('Login successful! Redirecting...');
-        toast.success('Login successful!');
-        
-        // Add a small delay to show the success message
+    if (response.ResponseCode === 200) {
+      setLoginStatus('Login successful! Checking configurations...');
+      toast.success('Login successful!');
+
+      // Check selected configurations
+      try {
+        const configData = await getSelectedConfigurations();
+
+        if (configData && Object.keys(configData).length > 0) {
+          setLoginStatus('Redirecting to dashboard...');
+          setTimeout(() => {
+            router.push('/dashboard');
+          }, 1000);
+        } else {
+          setLoginStatus('Redirecting to file configuration setup...');
+          setTimeout(() => {
+            router.push('/file-config');
+          }, 1000);
+        }
+      } catch (configError) {
+        console.error('Error checking configuration:', configError);
+        toast.error('Configuration check failed. Redirecting to file configuration setup...');
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push('/file-config');
         }, 1000);
-      } else if (response.ResponseCode === 403) {
-        handleSystemBlocked(response.ResponseMessage);
-      } else {
-        toast.error(response.ResponseMessage || 'Login completion failed');
-        setLoginStatus('');
       }
-    } catch (error) {
-      console.error('Login completion error:', error);
-      toast.error('An error occurred during login completion. Please try again.');
+
+    } else if (response.ResponseCode === 403) {
+      handleSystemBlocked(response.ResponseMessage);
+    } else {
+      toast.error(response.ResponseMessage || 'Login completion failed');
       setLoginStatus('');
     }
-  };
+  } catch (error) {
+    console.error('Login completion error:', error);
+    toast.error('An error occurred during login completion. Please try again.');
+    setLoginStatus('');
+  }
+};
+
 
   const handleSystemBlocked = (message: string) => {
     setSystemBlocked(true);
