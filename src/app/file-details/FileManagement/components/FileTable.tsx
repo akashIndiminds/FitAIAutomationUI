@@ -123,7 +123,7 @@ export default function FileTable({
 
                 return (
                   <tr
-                    key={file.id}
+                    key={file.taskId}
                     className={`border-b border-gray-100 hover:bg-gray-50 transition-colors duration-200 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
                   >
                     <td className="py-4 px-6 text-left">

@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import Controls from './components/Controls';
 import StatsCards from './components/StatsCards';
 import FileStatusOverview from './components/FileStatusOverview';
-import TaskManager from './components/TaskManager'; // Updated import
+import TaskManager from './components/TaskManager';
 import FileDetailsGrid from './components/FileDetailsGrid';
 import SystemStatusSection from './components/SystemStatusSection';
 import { useDashboardLogic } from './components/useDashboardLogic';
@@ -24,7 +24,6 @@ export default function Dashboard() {
     imported,
     downloadCycleMessage,
     stats,
-    // Remove activityLogs as we're using tasks now
     setStartDate,
     setEndDate,
     refreshStatus,
@@ -33,14 +32,13 @@ export default function Dashboard() {
     showFileDetails,
     backToOverview,
     openContainingFolder,
+    navigateToDetails,
   } = useDashboardLogic();
 
-  
   // Create tasks based on current dashboard state
   const generateTasks = () => {
     const tasks = [];
     
-    // Add download task if processing
     if (isProcessing) {
       tasks.push({
         id: 'download-task',
@@ -48,14 +46,13 @@ export default function Dashboard() {
         description: `Downloading files from ${startDate} to ${endDate}`,
         status: 'running' as const,
         priority: 'high' as const,
-        progress: Math.floor(Math.random() * 60) + 20, // Simulate progress
+        progress: Math.floor(Math.random() * 60) + 20,
         createdAt: new Date().toISOString(),
         estimatedTime: '5-10 min',
         fileCount: pending.length
       });
     }
 
-    // Add import task if there are downloaded files
     if (downloaded.length > 0) {
       tasks.push({
         id: 'import-task',
@@ -70,7 +67,6 @@ export default function Dashboard() {
       });
     }
 
-    // Add validation task
     if (imported.length > 0) {
       tasks.push({
         id: 'validation-task',
@@ -84,7 +80,6 @@ export default function Dashboard() {
       });
     }
 
-    // Add pending tasks
     if (pending.length > 0 && !isProcessing) {
       tasks.push({
         id: 'pending-task',
@@ -122,12 +117,37 @@ export default function Dashboard() {
     }
   };
 
-  // Helper function to get the correct file type
+  // Get files based on selected type
+  const getCurrentFiles = () => {
+    switch (selectedFileType) {
+      case 'pending':
+        return pending;
+      case 'downloaded':
+        return downloaded;
+      case 'imported':
+        return imported;
+      default:
+        return [];
+    }
+  };
+
   const getFileType = (): 'pending' | 'downloaded' | 'imported' => {
     if (selectedFileType === 'pending' || selectedFileType === 'downloaded' || selectedFileType === 'imported') {
       return selectedFileType;
     }
-    return 'pending'; // Default fallback
+    return 'pending';
+  };
+
+  // Enhanced navigateToDetails function that stores data in localStorage for FileManagement
+  const handleNavigateToDetails = (type: 'pending' | 'downloaded' | 'imported') => {
+    // Get all files data
+    const allFilesData = [...pending, ...downloaded, ...imported];
+    
+    // Store in localStorage for FileManagement to use
+    localStorage.setItem('fileDetailsAllFiles', JSON.stringify(allFilesData));
+    
+    // Call the original navigate function
+    navigateToDetails(type);
   };
 
   if (loading) {
@@ -187,7 +207,10 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <StatsCards stats={stats} />
+            <StatsCards 
+              stats={stats} 
+              navigateToDetails={handleNavigateToDetails}
+            />
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <div className="xl:col-span-2 bg-white rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)] overflow-hidden transform transition-all duration-300 hover:shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] hover:translate-y-[-5px]">
@@ -214,6 +237,7 @@ export default function Dashboard() {
                     downloaded={downloaded}
                     imported={imported}
                     onOpenFolder={openContainingFolder}
+                    navigateToDetails={handleNavigateToDetails}
                   />
                 </div>
               </div>
@@ -245,15 +269,20 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <SystemStatusSection stats={stats} onRefresh={refreshStatus} onShowFileDetails={showFileDetails} />
+            <SystemStatusSection 
+              stats={stats} 
+              onRefresh={refreshStatus} 
+              onShowFileDetails={showFileDetails} 
+            />
           </div>
         ) : (
           <div className="bg-white rounded-2xl p-6 shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)] transform transition-all duration-300">
             <FileDetailsGrid
-              files={selectedFileType === 'pending' ? pending : selectedFileType === 'downloaded' ? downloaded : imported}
+              files={getCurrentFiles()}
               type={getFileType()}
               onBack={backToOverview}
               onOpenFolder={openContainingFolder}
+              navigateToDetails={handleNavigateToDetails}
             />
           </div>
         )}

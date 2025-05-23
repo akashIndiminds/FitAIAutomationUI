@@ -98,7 +98,7 @@ export default function Pagination({
   }
 
   return (
-    <div className="w-full flex flex-col items-center mt-8 space-y-4">
+    <div className="w-full flex flex-col items-center space-y-2">
       <div className="flex items-center space-x-1 md:space-x-2">
         <button
           onClick={() => onPageChange(1)}

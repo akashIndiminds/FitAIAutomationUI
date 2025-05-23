@@ -1,6 +1,6 @@
 import React, { Dispatch, SetStateAction } from 'react';
-import { Search, X, Filter, RefreshCw } from 'lucide-react';
-
+import { Search, X, Filter, ArrowLeft } from 'lucide-react';
+import router from 'next/router';
 interface ActivityLogHeaderProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
@@ -16,15 +16,29 @@ export default function Header({
   setIsFilterVisible,
   isLoading,
 }: ActivityLogHeaderProps) {
+
+ 
+  const handleBackToDashboard = () => {
+  router.push('/dashboard'); 
+};
+
   return (
     <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-indigo-900 via-blue-800 to-indigo-900 rounded-t-lg shadow-md">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full mx-auto">
-        <div className="flex items-center">
-          <h1 className="text-xl font-bold text-white">
-            Activity Log Dashboard
-          </h1>
+
+        {/* Title + Back Button */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleBackToDashboard}
+            className="flex items-center gap-2 text-white hover:text-indigo-200 transition-all"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="hidden sm:inline text-sm font-medium">Back to Dashboard</span>
+          </button>
+          <h1 className="text-xl font-bold text-white">Activity Log</h1>
         </div>
-        
+
+        {/* Search and Filter Controls */}
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           {/* Search Input */}
           <div className="relative w-full sm:w-64">
@@ -47,7 +61,7 @@ export default function Header({
               </button>
             )}
           </div>
-          
+
           {/* Filters Toggle */}
           <button
             onClick={() => setIsFilterVisible(prev => !prev)}

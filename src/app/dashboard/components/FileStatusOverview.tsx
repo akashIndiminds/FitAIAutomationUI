@@ -9,6 +9,7 @@ interface FileStatusOverviewProps {
   downloaded: FileStatus[];
   imported: FileStatus[];
   onOpenFolder: (filepath: string) => void;
+  navigateToDetails: (type: 'pending' | 'downloaded' | 'imported') => void;
 }
 
 export default function FileStatusOverview({
@@ -16,9 +17,10 @@ export default function FileStatusOverview({
   downloaded,
   imported,
   onOpenFolder,
+  navigateToDetails,
 }: FileStatusOverviewProps) {
-  const router = useRouter();
 
+  
   // Get the 3 most recent files from each category based on timestamp
   const getLatestFiles = (files: FileStatus[], timestampField: string) => {
     return [...files]
@@ -85,7 +87,7 @@ export default function FileStatusOverview({
 
   // Handle navigation to file details page
   const handleViewAll = (type: 'pending' | 'downloaded' | 'imported') => {
-    router.push(`/file-details/${type}`);
+    navigateToDetails(type); // Use navigateToDetails instead of router.push
   };
 
   // Render individual file item with index and type for unique key
@@ -98,7 +100,7 @@ export default function FileStatusOverview({
     showFolderIcon: boolean = false
   ) => (
     <div
-      key={`${type}-${file.id || index}`} // Unique key using type and file.id or index
+      key={`${type}-${file.taskId || index}`} // Unique key using type and file.taskId or index
       className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-all duration-200 group"
     >
       <div className="flex items-start justify-between gap-3">

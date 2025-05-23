@@ -12,15 +12,10 @@ interface StatsCardsProps {
     processingSpeed: string;
     lastUpdated: string;
   };
+  navigateToDetails: (type: 'pending' | 'downloaded' | 'imported') => void;
 }
 
-export default function StatsCards({ stats }: StatsCardsProps) {
-  const router = useRouter();
-
-  const goToDetails = (type: 'pending' | 'downloaded' | 'imported') => {
-    router.push(`/file-details/${type}`);
-  };
-
+export default function StatsCards({ stats , navigateToDetails}: StatsCardsProps) {
   const cards = [
     {
       label: 'Total Files Processed',
@@ -37,6 +32,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       action: null,
       bgColor: 'bg-white',
       iconBg: 'bg-blue-50',
+      
     },
     {
       label: 'Files Awaiting Processing',
@@ -53,7 +49,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       shadowColor: 'shadow-amber-500/20',
       borderColor: 'border-amber-200',
       detail: 'Click below to view pending files',
-      action: () => goToDetails('pending'),
+     action: () => navigateToDetails('pending'),
       bgColor: 'bg-white',
       iconBg: 'bg-amber-50',
     },
@@ -69,9 +65,10 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       shadowColor: 'shadow-indigo-500/20',
       borderColor: 'border-indigo-200',
       detail: 'Click below to view downloaded files',
-      action: () => goToDetails('downloaded'),
+       action: () => navigateToDetails('downloaded'),
       bgColor: 'bg-white',
       iconBg: 'bg-indigo-50',
+      
     },
     {
       label: 'Files Imported into System',
@@ -90,7 +87,7 @@ export default function StatsCards({ stats }: StatsCardsProps) {
       shadowColor: 'shadow-green-500/20',
       borderColor: 'border-green-200',
       detail: 'Click below to view imported files',
-      action: () => goToDetails('imported'),
+       action: () => navigateToDetails('imported'),
       bgColor: 'bg-white',
       iconBg: 'bg-green-50',
     }

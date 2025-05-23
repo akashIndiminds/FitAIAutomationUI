@@ -138,7 +138,7 @@ export function DateNavigator({
               </div>
               <div className="flex items-center space-x-1">
                 <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                <span className="text-sm font-medium">Failed: {getStatusCount('Failed')}</span>
+                <span className="text-sm font-medium">Downloaded: {getStatusCount(' Downloaded')}</span>
               </div>
               <div className="flex items-center">
                 <span className="text-sm font-medium ml-4">Total: {filteredLogsLength}</span>

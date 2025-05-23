@@ -10,7 +10,10 @@ export default function FileDetailsPage() {
   
   return (
     <div className="w-full mx-auto py-6 px-4">
-      <FileManagement defaultType={type} />
+      <FileManagement 
+        defaultType={type} 
+        skipInitialFetch={false} // This page should fetch its own data
+      />
     </div>
   );
 }

@@ -6,47 +6,92 @@ import Header from './components/Header';
 import FileGrid from './components/FileGrid';
 import FileTable from './components/FileTable';
 import Pagination from '@/components/Pagination';
-import Loader, { TableLoader, GridLoader} from '@/components/loader'
+import Loader, { TableLoader, GridLoader } from '@/components/loader';
 import { FileStatus } from '@/components/types';
-import { 
-  FileSpreadsheet, 
-  FileText, 
-  FileJson,
-  Clock,
-  Download,
-  Upload,
-} from 'lucide-react';
+import { FileSpreadsheet, FileText, FileJson, Clock, Download, Upload } from 'lucide-react';
 
 interface FileManagementProps {
   initialFiles?: FileStatus[];
   defaultType?: 'pending' | 'downloaded' | 'imported';
   onBack?: () => void;
   onOpenFolder?: (filepath: string) => void;
+  skipInitialFetch?: boolean; // New prop to skip API fetching
 }
 
-export default function FileManagement({ 
-  initialFiles = [], 
+// Incremental file processing function
+const processIncrementalFiles = (files: FileStatus[]): FileStatus[] => {
+  return files.map(file => {
+    // Check if filetype starts with "I-" (incremental file)
+    if (file.filetype && file.filetype.startsWith('I-')) {
+      try {
+        // Extract the incremental number from filetype (e.g., "I-7" -> "7")
+        const incrementalNumber = file.filetype.replace('I-', '');
+        
+        // Process filename: remove ^ character and add incremental number
+        let processedFilename = file.filename;
+        if (processedFilename.includes('^')) {
+          // Remove ^ character and add incremental number
+          processedFilename = processedFilename.replace(/\^/g, '') + `-${incrementalNumber}`;
+        }
+        
+        // Process filepath if it exists
+        let processedFilepath = file.filepath;
+        if (processedFilepath && processedFilepath.includes('^')) {
+          processedFilepath = processedFilepath.replace(/\^/g, '') + `-${incrementalNumber}`;
+        }
+        
+        // Process spPath if it exists
+        let processedSpPath = file.spPath;
+        if (processedSpPath && processedSpPath.includes('^')) {
+          processedSpPath = processedSpPath.replace(/\^/g, '') + `-${incrementalNumber}`;
+        }
+        
+        return {
+          ...file,
+          filename: processedFilename,
+          filepath: processedFilepath,
+          spPath: processedSpPath,
+          // Keep original data for reference
+          originalFilename: file.filename,
+          originalFilepath: file.filepath,
+          originalSpPath: file.spPath
+        };
+      } catch (error) {
+        console.error('Error processing incremental file:', file.filename, error);
+        return file; // Return original file if processing fails
+      }
+    }
+    
+    return file; // Return unchanged if not incremental file
+  });
+};
+
+export default function FileManagement({
+  initialFiles = [],
   defaultType = 'pending',
   onBack,
-  onOpenFolder: propOnOpenFolder
+  onOpenFolder: propOnOpenFolder,
+  skipInitialFetch = false, // Default to false for backward compatibility
 }: FileManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
-  
-  const [files, setFiles] = useState<FileStatus[]>(initialFiles);
+
+  const [files, setFiles] = useState<FileStatus[]>(() => 
+    initialFiles.length > 0 ? processIncrementalFiles(initialFiles) : []
+  );
   const [sortField, setSortField] = useState<keyof FileStatus>('createdTime');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [currentPage, setCurrentPage] = useState(1);
-  
+
   // Loading states
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(!skipInitialFetch && initialFiles.length === 0);
   const [isTypeChanging, setIsTypeChanging] = useState(false);
   const [isViewChanging, setIsViewChanging] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
-  
-  const baseURL=process.env.NEXT_PUBLIC_API_URL;
+
+  const baseURL = process.env.NEXT_PUBLIC_API_URL;
 
   const activeType = useMemo(() => {
     if (pathname.includes('pending')) return 'pending';
@@ -54,26 +99,31 @@ export default function FileManagement({
     if (pathname.includes('imported')) return 'imported';
     return defaultType;
   }, [pathname, defaultType]);
-  
-  // Fetch files from the API
+
+  // Fetch files from the API - only if not skipping initial fetch
   const fetchFiles = async (showLoader = false) => {
+    if (skipInitialFetch) return; // Don't fetch if we're using dashboard data
+    
     try {
       if (showLoader) setIsFetching(true);
-      
+
       const response = await fetch(`${baseURL}/api/automate/status`);
       if (!response.ok) {
         throw new Error('Failed to fetch file statuses');
       }
       const data = await response.json();
       if (data.success) {
-        const fetchedFiles: FileStatus[] = data.data.map((file: any, index: number) => ({
+        let fetchedFiles: FileStatus[] = data.data.map((file: any, index: number) => ({
           ...file,
           id: `${file.filename}-${index}`,
         }));
-        
+
+        // Process incremental files
+        fetchedFiles = processIncrementalFiles(fetchedFiles);
+
         // Simulate network delay for better UX
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         setFiles(fetchedFiles);
         setIsInitialLoading(false);
       } else {
@@ -88,18 +138,43 @@ export default function FileManagement({
     }
   };
 
-  // Initial load
+  // Update files when initialFiles change (when coming from dashboard)
   useEffect(() => {
-    fetchFiles();
-    const interval = setInterval(() => fetchFiles(false), 5000); // Background refresh without loader
-    return () => clearInterval(interval);
-  }, []);
+    if (skipInitialFetch && initialFiles.length > 0) {
+      const processedFiles = processIncrementalFiles(initialFiles);
+      setFiles(processedFiles);
+      setIsInitialLoading(false);
+    }
+  }, [initialFiles, skipInitialFetch]);
+
+  // Initial load - only fetch if not using dashboard data
+  useEffect(() => {
+    if (!skipInitialFetch) {
+      // Check localStorage first (for direct page access)
+      const storedFiles = localStorage.getItem('fileDetailsAllFiles');
+      if (storedFiles) {
+        const parsedFiles = JSON.parse(storedFiles);
+        const processedFiles = processIncrementalFiles(parsedFiles);
+        setFiles(processedFiles);
+        localStorage.removeItem('fileDetailsAllFiles');
+        setIsInitialLoading(false);
+      } else {
+        fetchFiles(true);
+      }
+
+      // Set up periodic refresh only for direct access
+      const interval = setInterval(() => fetchFiles(false), 5000);
+      return () => clearInterval(interval);
+    } else {
+      // If using dashboard data, mark as loaded
+      setIsInitialLoading(false);
+    }
+  }, [skipInitialFetch]);
 
   // Handle type change with loader
   useEffect(() => {
     if (!isInitialLoading) {
       setIsTypeChanging(true);
-      // Simulate loading delay for type change
       const timer = setTimeout(() => {
         setIsTypeChanging(false);
       }, 800);
@@ -108,56 +183,55 @@ export default function FileManagement({
   }, [activeType, isInitialLoading]);
 
   // Handle view mode change with loader
-  const handleViewModeChange = useCallback((newViewMode: 'grid' | 'table') => {
-    if (newViewMode !== viewMode) {
-      setIsViewChanging(true);
-      setTimeout(() => {
-        setViewMode(newViewMode);
+  const handleViewModeChange = useCallback(
+    (newViewMode: 'grid' | 'table') => {
+      if (newViewMode !== viewMode) {
+        setIsViewChanging(true);
         setTimeout(() => {
-          setIsViewChanging(false);
-        }, 600);
-      }, 200);
-    }
-  }, [viewMode]);
-
-  // Fixed getFileType function - this was the main issue
-  const getFileType = (file: FileStatus): 'pending' | 'downloaded' | 'imported' => {
-    // If download status is 404, file is pending
-
-   
-    if (file.dlStatus === 404) {
-      return 'pending';
-    }
-    
-    // If download status is 200 (downloaded successfully)
-    if (file.dlStatus === 200) {
-      // Check if it's also imported (spStatus exists and is not 404)
-      if (file.spStatus && file.spStatus !== 404) {
-        return 'imported';
+          setViewMode(newViewMode);
+          setTimeout(() => {
+            setIsViewChanging(false);
+          }, 600);
+        }, 200);
       }
-      // If downloaded but not imported, it's in downloaded state
-      return 'downloaded';
+    },
+    [viewMode]
+  );
+
+  // Updated function to check if file should appear in a specific category
+  const shouldShowInCategory = (file: FileStatus, category: 'pending' | 'downloaded' | 'imported'): boolean => {
+    const isDownloaded = file.dlStatus === 200;
+    const isImported = file.spStatus && file.spStatus !== 404;
+
+    switch (category) {
+      case 'pending':
+        // Show in pending if not downloaded yet
+        return !isDownloaded;
+      
+      case 'downloaded':
+        // Show in downloaded if downloaded (regardless of import status)
+        return isDownloaded;
+      
+      case 'imported':
+        // Show in imported if both downloaded and imported
+        return isDownloaded && !!isImported;
+      
+      default:
+        return false;
     }
-    
-    // Default case - if dlStatus is neither 404 nor 200
-    // Check if it has spStatus (imported) without being downloaded
-    if (file.spStatus && file.spStatus !== 404) {
-      return 'imported';
-    }
-    
-    // Default to pending if status is unclear
-    return 'pending';
   };
 
+  // Updated filtering logic
   const typeFilteredFiles = useMemo(() => {
-    return files.filter(file => getFileType(file) === activeType);
+    return files.filter((file) => shouldShowInCategory(file, activeType));
   }, [files, activeType]);
 
   const searchFilteredFiles = useMemo(() => {
-    return typeFilteredFiles.filter(file => 
-      file.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (file.segment?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (file.dir?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    return typeFilteredFiles.filter(
+      (file) =>
+        file.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (file.segment?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (file.dir?.toLowerCase() || '').includes(searchTerm.toLowerCase())
     );
   }, [typeFilteredFiles, searchTerm]);
 
@@ -170,27 +244,24 @@ export default function FileManagement({
       } else {
         const aValue = a[sortField] || '';
         const bValue = b[sortField] || '';
-        return sortDirection === 'asc' ? 
-          aValue.toString().localeCompare(bValue.toString()) : 
-          bValue.toString().localeCompare(aValue.toString());
+        return sortDirection === 'asc'
+          ? aValue.toString().localeCompare(bValue.toString())
+          : bValue.toString().localeCompare(aValue.toString());
       }
     });
   }, [searchFilteredFiles, sortField, sortDirection]);
-  
-  // Pagination logic
-  const filesPerPage = 9;
+
+  const filesPerPage = 12;
   const currentFiles = useMemo(() => {
     const indexOfFirstFile = (currentPage - 1) * filesPerPage;
     const indexOfLastFile = currentPage * filesPerPage;
     return sortedFiles.slice(indexOfFirstFile, indexOfLastFile);
   }, [sortedFiles, currentPage]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [activeType, searchTerm]);
 
-  // Adjust currentPage if it exceeds total pages
   useEffect(() => {
     const totalPages = Math.ceil(sortedFiles.length / filesPerPage);
     if (currentPage > totalPages && totalPages > 0) {
@@ -210,53 +281,67 @@ export default function FileManagement({
       return <FileText className="h-5 w-5 text-blue-600" />;
     }
   }, []);
-  
-  const handleSort = useCallback((field: keyof FileStatus) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  }, [sortField, sortDirection]);
-  
+
+  const handleSort = useCallback(
+    (field: keyof FileStatus) => {
+      if (sortField === field) {
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        setSortField(field);
+        setSortDirection('asc');
+      }
+    },
+    [sortField, sortDirection]
+  );
+
   const formatDate = useCallback((dateString?: string) => {
     if (!dateString) return '--:--';
     const date = new Date(dateString);
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
   }, []);
-  
-  // Updated getStatusLabel function to show correct status for each section
+
   const getStatusLabel = useCallback((type: 'pending' | 'downloaded' | 'imported') => {
     switch (type) {
-      case 'pending': return 'Pending';
-      case 'downloaded': return 'Downloaded';
-      case 'imported': return 'Imported';
+      case 'pending':
+        return 'Pending';
+      case 'downloaded':
+        return 'Downloaded';
+      case 'imported':
+        return 'Imported';
     }
   }, []);
-  
+
   const getStatusIcon = useCallback((type: 'pending' | 'downloaded' | 'imported') => {
     switch (type) {
-      case 'pending': return <Clock className="h-5 w-5 text-yellow-500" />;
-      case 'downloaded': return <Download className="h-5 w-5 text-blue-500" />;
-      case 'imported': return <Upload className="h-5 w-5 text-green-500" />;
+      case 'pending':
+        return <Clock className="h-5 w-5 text-yellow-500" />;
+      case 'downloaded':
+        return <Download className="h-5 w-5 text-blue-500" />;
+      case 'imported':
+        return <Upload className="h-5 w-5 text-green-500" />;
     }
   }, []);
-  
-  const handleTypeChange = useCallback((type: 'pending' | 'downloaded' | 'imported') => {
-    if (router && activeType !== type) {
-      router.push(`/file-details/${type}`);
-    }
-  }, [router, activeType]);
-  
-  const onOpenFolderHandler = useCallback((filepath: string) => {
-    if (propOnOpenFolder) {
-      propOnOpenFolder(filepath);
-    } else {
-      console.log(`Opening folder: ${filepath}`);
-    }
-  }, [propOnOpenFolder]);
-  
+
+  const handleTypeChange = useCallback(
+    (type: 'pending' | 'downloaded' | 'imported') => {
+      if (router && activeType !== type) {
+        router.push(`/file-details/${type}`);
+      }
+    },
+    [router, activeType]
+  );
+
+  const onOpenFolderHandler = useCallback(
+    (filepath: string) => {
+      if (propOnOpenFolder) {
+        propOnOpenFolder(filepath);
+      } else {
+        console.log(`Opening folder: ${filepath}`);
+      }
+    },
+    [propOnOpenFolder]
+  );
+
   const handleBackClick = useCallback(() => {
     if (onBack) {
       onBack();
@@ -265,22 +350,17 @@ export default function FileManagement({
     }
   }, [onBack, router]);
 
-  // Show initial loading
   if (isInitialLoading) {
     return (
       <div className="w-full rounded-lg shadow-md bg-white">
         <div className="p-6 border-b border-gray-200">
           <div className="h-16 bg-gray-100 rounded animate-pulse"></div>
         </div>
-        <Loader 
-          size="lg" 
-          text="Loading file management system..." 
-          className="min-h-96"
-        />
+        <Loader size="lg" text="Loading file management system..." className="min-h-96" />
       </div>
     );
   }
-  
+
   return (
     <div className="w-full rounded-lg shadow-md">
       <Header
@@ -295,16 +375,11 @@ export default function FileManagement({
         getStatusLabel={getStatusLabel}
         getStatusIcon={getStatusIcon}
       />
-      
-      {/* Show different loaders based on state */}
+
       {isTypeChanging ? (
-        <div className="relative">
-          {viewMode === 'grid' ? <GridLoader /> : <TableLoader />}
-        </div>
+        <div className="relative">{viewMode === 'grid' ? <GridLoader /> : <TableLoader />}</div>
       ) : isViewChanging ? (
-        <div className="relative">
-          {viewMode === 'grid' ? <GridLoader /> : <TableLoader />}
-        </div>
+        <div className="relative">{viewMode === 'grid' ? <GridLoader /> : <TableLoader />}</div>
       ) : viewMode === 'grid' ? (
         <FileGrid
           files={currentFiles}
@@ -325,8 +400,7 @@ export default function FileManagement({
           formatDate={formatDate}
         />
       )}
-      
-      {/* Only show pagination when not loading */}
+
       {!isTypeChanging && !isViewChanging && (
         <Pagination
           totalFiles={sortedFiles.length}
@@ -335,8 +409,7 @@ export default function FileManagement({
           onPageChange={setCurrentPage}
         />
       )}
-      
-      {/* Background loading indicator for data refresh */}
+
       {isFetching && (
         <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

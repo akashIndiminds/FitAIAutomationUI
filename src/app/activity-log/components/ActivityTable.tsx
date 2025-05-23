@@ -1,24 +1,19 @@
-interface ActivityLog {
-  id: number;
-  dir: string;
-  segment: string;
-  filename: string;
-  filetype: string;
-  spName: string;
-  spStatus: number;
-  dlStatus: number;
-  lastModified: string;
-}
-
+import { ActivityLog } from '@/components/types';
 interface ActivityTableProps {
   logs: ActivityLog[];
   sortColumn: string;
   sortDirection: string;
   sortBy: (column: string) => void;
   getRowClass: (log: ActivityLog) => string;
-  getStatusClass: (status: number) => string;
-  getStatusDisplay: (status: number) => string;
+  getStatusClass: (status: number | string) => string; // Type updated
+  getStatusDisplay: (status: number | string) => string; // Type updated
 }
+
+const formatDate = (dateString?: string) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
+};
 
 export function ActivityTable({
   logs,
@@ -34,6 +29,16 @@ export function ActivityTable({
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
+            <th
+              scope="col"
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+              onClick={() => sortBy('filename')}
+            >
+              Filename
+              <span className="ml-1 inline-block">
+                {sortColumn === 'filename' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+              </span>
+            </th>
             <th
               scope="col"
               className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
@@ -57,35 +62,25 @@ export function ActivityTable({
             <th
               scope="col"
               className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => sortBy('filename')}
+              onClick={() => sortBy('spTime')}
             >
-              Filename
+              SP Time
               <span className="ml-1 inline-block">
-                {sortColumn === 'filename' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                {sortColumn === 'spTime' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
               </span>
             </th>
             <th
               scope="col"
               className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => sortBy('filetype')}
+              onClick={() => sortBy('dlTime')}
             >
-              Type
+              DL Time
               <span className="ml-1 inline-block">
-                {sortColumn === 'filetype' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
-              </span>
-            </th>
-            <th
-              scope="col"
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => sortBy('spName')}
-            >
-              Process Name
-              <span className="ml-1 inline-block">
-                {sortColumn === 'spName' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                {sortColumn === 'dlTime' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
               </span>
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Process Status
+              Import Status
             </th>
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Download Status
@@ -106,15 +101,15 @@ export function ActivityTable({
           {logs.length > 0 ? (
             logs.map((log) => (
               <tr key={log.id} className={`hover:bg-gray-50 ${getRowClass(log)}`}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">{log.filename}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.dir}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.segment}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">{log.filename}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                    {log.filetype}
-                  </span>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {formatDate(log.spTime)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.spName}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {formatDate(log.dlTime)}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClass(log.spStatus)}`}>
                     {getStatusDisplay(log.spStatus)}
@@ -126,7 +121,7 @@ export function ActivityTable({
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(log.lastModified).toLocaleString()}
+                  {formatDate(log.lastModified)}
                 </td>
               </tr>
             ))

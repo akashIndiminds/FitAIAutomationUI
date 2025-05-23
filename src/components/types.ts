@@ -1,17 +1,19 @@
 ///components/types
 export interface ActivityLog {
-  id: number;
+    id: number;
   dir: string;
   segment: string;
   filename: string;
   filetype: string;
   spName: string;
-  spStatus: number; 
-  dlStatus: number; 
+  spStatus: number;
+  dlStatus: number;
   lastModified: string;
+  spTime: string;
+  dlTime: string;
 }
 export interface FileStatus {
-  id: string;
+  taskId: number;
   dir: string;
   segment: string;
   folderPath: string;

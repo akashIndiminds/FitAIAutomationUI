@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';  
 import { DateNavigator } from './components/DateNavigator';
 import { Filters } from './components/Filters';
@@ -7,18 +7,8 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { ActivityTable } from './components/ActivityTable';
 import { Pagination } from './components/Pagination';
 import { getActivityLogs } from '@/services/activityLogService';
+import { ActivityLog } from '@/components/types';
 
-interface ActivityLog {
-  id: number;
-  dir: string;
-  segment: string;
-  filename: string;
-  filetype: string;
-  spName: string;
-  spStatus: number;
-  dlStatus: number;
-  lastModified: string;
-}
 
 interface ErrorState {
   message: string;
@@ -33,8 +23,9 @@ export default function ActivityLogPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [displayedDate, setDisplayedDate] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [fileStatusFilter, setFileStatusFilter] = useState('');
+  const [dirFilter, setDirFilter] = useState('');
+  const [segmentFilter, setSegmentFilter] = useState('');
   const [sortColumn, setSortColumn] = useState('lastModified');
   const [sortDirection, setSortDirection] = useState('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,77 +34,89 @@ export default function ActivityLogPage() {
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const uniqueDirs = useMemo(() => Array.from(new Set(activityLogs.map(log => log.dir))), [activityLogs]);
+  const uniqueSegments = useMemo(() => Array.from(new Set(activityLogs.map(log => log.segment))), [activityLogs]);
 
-  const applyFilters = useCallback(
-    (logs = activityLogs) => {
-      try {
-        let results = [...logs];
-        if (searchTerm) {
-          const term = searchTerm.toLowerCase();
-          results = results.filter(
-            (log) =>
-              (log.dir && log.dir.toLowerCase().includes(term)) ||
-              (log.segment && log.segment.toLowerCase().includes(term)) ||
-              (log.filename && log.filename.toLowerCase().includes(term)) ||
-              (log.spName && log.spName.toLowerCase().includes(term))
-          );
-          
-          if (results.length === 0 && logs.length > 0) {
-            setErrorState({
-              message: `No results found for "${searchTerm}". Try adjusting your search criteria.`,
-              type: 'info'
-            });
-          } else {
-            if (errorState?.message?.includes("No results found")) {
-              setErrorState(null);
-            }
-          }
-        }
+ const applyFilters = useCallback(
+  (logs = activityLogs) => {
+    try {
+      let results = [...logs];
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        results = results.filter(
+          (log) =>
+            (log.dir && log.dir.toLowerCase().includes(term)) ||
+            (log.segment && log.segment.toLowerCase().includes(term)) ||
+            (log.filename && log.filename.toLowerCase().includes(term))
+        );
         
-        if (statusFilter) {
-          results = results.filter((log) => {
-            if (statusFilter === 'Completed') return log.spStatus === 200 && log.dlStatus === 200;
-            if (statusFilter === 'Failed') return log.spStatus === 404 || log.spStatus === 500 || log.dlStatus === 404 || log.dlStatus === 500;
-            if (statusFilter === 'Pending') return log.spStatus === 202 || log.dlStatus === 202;
-            return true;
+        if (results.length === 0 && logs.length > 0) {
+          setErrorState({
+            message: `No results found for "${searchTerm}". Try adjusting your search criteria.`,
+            type: 'info'
           });
+        } else if (errorState?.message?.includes("No results found")) {
+          setErrorState(null);
         }
-        
-        if (typeFilter) {
-          results = results.filter((log) => log.filetype && log.filetype.toLowerCase() === typeFilter.toLowerCase());
-        }
-        
-        results = sortData(results);
-        setFilteredLogs(results);
-        setTotalPages(Math.ceil(results.length / itemsPerPage));
-        setCurrentPage(1);
-      } catch (error) {
-        setErrorState({
-          message: "Error applying filters. Please try again.",
-          type: 'error'
+      }
+
+      // Apply the unified file status filter
+      if (fileStatusFilter) {
+        results = results.filter((log) => {
+          if (fileStatusFilter === 'Completed') {
+            // Both downloaded and imported successfully
+            return log.dlStatus === 200 && log.spStatus !== 404;
+          }
+          if (fileStatusFilter === 'Downloaded') {
+            // Only downloaded but not imported yet
+            return log.dlStatus === 200 && log.spStatus !== 200;
+          }
+          if (fileStatusFilter === 'Pending') {
+            // Neither downloaded nor imported completely
+            return log.dlStatus !== 200 || log.spStatus !== 200;
+          }
+          return true;
         });
       }
-    },
-    [searchTerm, statusFilter, typeFilter, sortColumn, sortDirection, itemsPerPage, activityLogs, errorState]
-  );
+
+      // Apply directory filter
+      if (dirFilter) {
+        results = results.filter(log => log.dir === dirFilter);
+      }
+
+      // Apply segment filter
+      if (segmentFilter) {
+        results = results.filter(log => log.segment === segmentFilter);
+      }
+
+      results = sortData(results);
+      setFilteredLogs(results);
+      setTotalPages(Math.ceil(results.length / itemsPerPage));
+      setCurrentPage(1);
+    } catch (error) {
+      setErrorState({
+        message: "Error applying filters. Please try again.",
+        type: 'error'
+      });
+    }
+  },
+  [searchTerm, fileStatusFilter, dirFilter, segmentFilter, sortColumn, sortDirection, itemsPerPage, activityLogs, errorState]
+);
 
   const fetchActivityLogs = useCallback(async () => {
-     // Convert both dates to YYYY-MM-DD format for consistent comparison
-  const selectedDateStr = selectedDate; // Already in YYYY-MM-DD format
-  const todayStr = new Date().toISOString().split('T')[0]; // Get YYYY-MM-DD
-  
-  // Now compare the strings directly
-  if (selectedDateStr > todayStr) {
-    setErrorState({
-      message: "Cannot fetch logs for future dates. Please select today or a past date.",
-      type: 'warning'
-    });
-    return;
-  }
-  
-  setIsLoading(true);
-  setErrorState(null);
-  
+    const selectedDateStr = selectedDate;
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    if (selectedDateStr > todayStr) {
+      setErrorState({
+        message: "Cannot fetch logs for future dates. Please select today or a past date.",
+        type: 'warning'
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    setErrorState(null);
     
     try {
       const logs = await getActivityLogs(selectedDate);
@@ -124,9 +127,7 @@ export default function ActivityLogPage() {
         message: `Successfully loaded activity logs for ${new Date(selectedDate).toLocaleDateString()}`,
         type: 'success'
       });
-      setTimeout(() => {
-        setErrorState(null);
-      }, 3000);
+      setTimeout(() => setErrorState(null), 3000);
     } catch (error) {
       setErrorState({
         message: error instanceof Error ? error.message : "An unknown error occurred",
@@ -141,7 +142,13 @@ export default function ActivityLogPage() {
     (data: ActivityLog[]) => {
       return [...data].sort((a, b) => {
         let aValue, bValue;
-        if (sortColumn === 'lastModified') {
+        if (sortColumn === 'spTime') {
+          aValue = new Date(a.spTime).getTime();
+          bValue = new Date(b.spTime).getTime();
+        } else if (sortColumn === 'dlTime') {
+          aValue = new Date(a.dlTime).getTime();
+          bValue = new Date(b.dlTime).getTime();
+        } else if (sortColumn === 'lastModified') {
           aValue = new Date(a.lastModified).getTime();
           bValue = new Date(b.lastModified).getTime();
         } else {
@@ -180,10 +187,7 @@ export default function ActivityLogPage() {
         message: "Cannot navigate to future dates",
         type: 'warning'
       });
-      
-      setTimeout(() => {
-        setErrorState(null);
-      }, 3000);
+      setTimeout(() => setErrorState(null), 3000);
     }
   }, [selectedDate]);
 
@@ -200,20 +204,22 @@ export default function ActivityLogPage() {
     [totalPages]
   );
 
-  const getStatusDisplay = useCallback((status: number) => {
-    if (status === 200) return 'Completed';
-    if (status === 202) return 'Pending';
-    if (status === 404) return 'Not Found';
-    if (status === 500) return 'Error';
-    return status.toString();
-  }, []);
+const getStatusDisplay = useCallback((status: number | string) => {
+  if (typeof status === 'string') return 'Imported';
+  if (status === 200) return 'Completed';
+  if (status === 202) return 'Pending';
+  if (status === 404) return 'Not Found';
+  if (status === 500) return 'Error';
+  return 'Unknown'; // Default case numbers ke liye
+}, []);
 
-  const getStatusClass = useCallback((status: number) => {
-    if (status === 200) return 'bg-green-100 text-green-800';
-    if (status === 202) return 'bg-yellow-100 text-yellow-800';
-    if (status === 404 || status === 500) return 'bg-red-100 text-red-800';
-    return '';
-  }, []);
+const getStatusClass = useCallback((status: number | string) => {
+  if (typeof status === 'string') return 'bg-blue-100 text-blue-800';
+  if (status === 200) return 'bg-green-100 text-green-800';
+  if (status === 202) return 'bg-yellow-100 text-yellow-800';
+  if (status === 404 || status === 500) return 'bg-red-100 text-red-800';
+  return '';
+}, []);
 
   const getRowClass = useCallback((log: ActivityLog) => {
     if (log.spStatus === 200 && log.dlStatus === 200) return 'border-l-4 border-green-500';
@@ -222,17 +228,18 @@ export default function ActivityLogPage() {
     return '';
   }, []);
 
-  const getStatusCount = useCallback(
-    (status: string) => {
-      return filteredLogs.filter((log) => {
-        if (status === 'Completed') return log.spStatus === 200 && log.dlStatus === 200;
-        if (status === 'Failed') return log.spStatus === 404 || log.spStatus === 500 || log.dlStatus === 404 || log.dlStatus === 500;
-        if (status === 'Pending') return (log.spStatus === 202 || log.dlStatus === 202) && log.spStatus !== 404 && log.spStatus !== 500 && log.dlStatus !== 404 && log.dlStatus !== 500;
-        return false;
-      }).length;
-    },
-    [filteredLogs]
-  );
+const getStatusCount = useCallback(
+  (status: string) => {
+    return filteredLogs.filter((log) => {
+      if (status === 'Completed') return log.spStatus === 200 && log.dlStatus === 200;
+      if (status === 'Downloaded') return log.dlStatus === 200 && log.spStatus !== 200;
+      if (status === 'Pending') return log.dlStatus !== 200 || log.spStatus !== 200;
+      return false;
+    }).length;
+  },
+  [filteredLogs]
+);
+
 
   const paginatedLogs = useCallback(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -243,13 +250,13 @@ export default function ActivityLogPage() {
     setErrorState(null);
   }, []);
 
-  useEffect(() => {
-    if (selectedDate !== displayedDate) {
-      setStatusFilter('');
-      setTypeFilter('');
-    }
-  }, [selectedDate, displayedDate]);
-
+ useEffect(() => {
+  if (selectedDate !== displayedDate) {
+    setFileStatusFilter('');
+    setDirFilter('');
+    setSegmentFilter('');
+  }
+}, [selectedDate, displayedDate]);
   useEffect(() => {
     applyFilters();
   }, [applyFilters]);
@@ -288,20 +295,26 @@ export default function ActivityLogPage() {
           </div>
         )}
         
-        {isFilterVisible && (
-          <div className="mt-4">
-            <Filters
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              typeFilter={typeFilter}
-              setTypeFilter={setTypeFilter}
-              itemsPerPage={itemsPerPage}
-              setItemsPerPage={setItemsPerPage}
-              setSearchTerm={setSearchTerm}
-              onClose={() => setIsFilterVisible(false)}
-            />
-          </div>
-        )}
+{isFilterVisible && (
+  <div className="mt-4">
+    <Filters
+      fileStatusFilter={fileStatusFilter}
+      setFileStatusFilter={setFileStatusFilter}
+      dirFilter={dirFilter}
+      setDirFilter={setDirFilter}
+      segmentFilter={segmentFilter}
+      setSegmentFilter={setSegmentFilter}
+      uniqueDirs={uniqueDirs}
+      uniqueSegments={uniqueSegments}
+      itemsPerPage={itemsPerPage}
+      setItemsPerPage={setItemsPerPage}
+      setSearchTerm={setSearchTerm}
+      onClose={() => setIsFilterVisible(false)}
+    />
+  </div>
+)}
+
+
         
         <main className="mt-1">
           <div className="bg-white rounded-lg shadow overflow-hidden">

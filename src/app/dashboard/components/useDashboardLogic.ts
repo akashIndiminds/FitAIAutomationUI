@@ -63,13 +63,56 @@ export const useDashboardLogic = () => {
 
   const formatDate = (date: Date): string => date.toISOString().split('T')[0];
 
+  // Helper function to handle incremental file naming
+  const processIncrementalFiles = (fileStatuses: FileStatus[]): FileStatus[] => {
+    return fileStatuses.map(file => {
+      // Check if file has incremental filetype (starts with "I-")
+      if (file.filetype && file.filetype.startsWith('I-')) {
+        const incrementalNumber = file.filetype.split('-')[1] || '7';
+        
+        // Remove the ^ character from filename if present and add incremental suffix
+        let newFilename = file.filename;
+        if (newFilename.endsWith('^')) {
+          newFilename = newFilename.slice(0, -1); // Remove the ^ character
+        }
+        newFilename = `${newFilename}-${incrementalNumber}`;
+        
+        // Update filepath and spPath accordingly
+        let newFilepath = file.filepath;
+        let newSpPath = file.spPath;
+        
+        if (file.filepath) {
+          const originalFilename = file.filename;
+          newFilepath = file.filepath.replace(originalFilename, newFilename);
+        }
+        
+        if (file.spPath) {
+          const originalFilename = file.filename;
+          newSpPath = file.spPath.replace(originalFilename, newFilename);
+        }
+        
+        return {
+          ...file,
+          filename: newFilename,
+          filepath: newFilepath,
+          spPath: newSpPath
+        };
+      }
+      
+      return file;
+    });
+  };
+
   // API Services
   const fileStatusService = {
     getFileStatus: async (): Promise<FileStatus[]> => {
       const response = await fetch(`${API_BASE}/status`);
       if (!response.ok) throw new Error('Failed to fetch file status');
       const json = await response.json();
-      if (json.success && Array.isArray(json.data)) return json.data;
+      if (json.success && Array.isArray(json.data)) {
+        // Process incremental files before returning
+        return processIncrementalFiles(json.data);
+      }
       throw new Error('Invalid response format');
     },
     getActivityLogs: async (): Promise<ActivityLog[]> => {
@@ -91,22 +134,25 @@ export const useDashboardLogic = () => {
     },
   };
 
-const importService = {
-  importFiles: async (files: FileStatus[]): Promise<FileStatus[]> => {
-    // Optional: Validate files before making the request
-    if (files.length === 0) {
-      throw new Error('No files provided for import');
-    }
-    const response = await fetch(`${API_BASE}/ImportFiles`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) throw new Error('Import failed');
-    const json = await response.json();
-    if (json.success && Array.isArray(json.data)) return json.data;
-    throw new Error('Invalid import response');
-  },
-};
+  const importService = {
+    importFiles: async (files: FileStatus[]): Promise<FileStatus[]> => {
+      if (files.length === 0) {
+        throw new Error('No files provided for import');
+      }
+      const response = await fetch(`${API_BASE}/ImportFiles`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) throw new Error('Import failed');
+      const json = await response.json();
+      if (json.success && Array.isArray(json.data)) {
+        // Process incremental files in the response
+        return processIncrementalFiles(json.data);
+      }
+      throw new Error('Invalid import response');
+    },
+  };
+
   // Initialization
   useEffect(() => {
     const initialize = async () => {
@@ -136,12 +182,12 @@ const importService = {
 
       await fetchInitialData();
 
-      // Status check timer - reduced from 30s to 20s for more responsive updates
+      // Status check timer
       statusTimerRef.current = setInterval(() => {
         if (isProcessing) refreshStatus();
       }, 20000);
 
-      // Auto-trigger timer - check if there's work to do
+      // Auto-trigger timer
       autoTriggerTimerRef.current = setInterval(async () => {
         if (isProcessing) return;
         try {
@@ -194,28 +240,21 @@ const importService = {
       updateStats(todayFiles);
 
       if (todayFiles.length === 0) {
-        // No files for today, start build task
         await startBuildTask(today);
       } else {
-        // Check if there are files to download
         const hasFilesToDownload = todayFiles.some((f) => f.dlStatus !== 200);
-        // Check if there are files to import
         const hasFilesToImport = todayFiles.some((f) => f.dlStatus === 200 && f.spStatus === 404);
 
         if (hasFilesToDownload) {
-          // Start download process
           startDownload();
           
-          // Also start a parallel import check/process if we haven't imported recently
           if (hasFilesToImport && Date.now() - lastImportTime > 15000) {
             startImportCycle();
           }
         } else if (hasFilesToImport) {
-          // All downloads done, just imports remain
           setDownloadCycleMessage('Ready to import');
           startImport();
         } else {
-          // Everything is done
           setIsProcessing(false);
           localStorage.removeItem('isProcessing');
           toast.success('All files have been processed');
@@ -226,45 +265,41 @@ const importService = {
     }
   };
 
-const updateFileStates = (fileStatuses: FileStatus[]) => {
+  const updateFileStates = (fileStatuses: FileStatus[]) => {
     const today = formatDate(new Date());
     const all = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
     
-    // Pending: files that are not downloaded yet (dlStatus !== 200)
     setPending(all.filter((f) => f.dlStatus !== 200));
-    
-    // Downloaded: files that are downloaded (dlStatus === 200) - regardless of import status
     setDownloaded(all.filter((f) => f.dlStatus === 200));
-    
-    // Imported: files that are downloaded AND imported (dlStatus === 200 AND spStatus !== 404)
     setImported(all.filter((f) => f.dlStatus === 200 && f.spStatus !== 404));
   };
 
   const updateStats = (fileStatuses: FileStatus[]) => {
-  const today = formatDate(new Date());
-  const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
-  const totalFiles = todayFiles.length;
-  const pendingFiles = todayFiles.filter((f) => f.dlStatus !== 200).length;
-  const downloadedFiles = todayFiles.filter((f) => f.dlStatus === 200).length; // Updated to count all downloaded files
-  const importedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus !== 404).length;
+    const today = formatDate(new Date());
+    const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
+    
+    const totalFiles = todayFiles.length;
+    const pendingFiles = todayFiles.filter((f) => f.dlStatus !== 200).length;
+    const downloadedFiles = todayFiles.filter((f) => f.dlStatus === 200).length;
+    const importedFiles = todayFiles.filter((f) => f.dlStatus === 200 && f.spStatus !== 404).length;
 
-  const now = new Date();
-  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const recentImported = todayFiles.filter(
-    (f) => f.spStatus !== 404 && new Date(f.lastModified || f.createdTime) > hourAgo
-  );
-  const processingSpeed =
-    recentImported.length > 0 ? `${(recentImported.length / 60).toFixed(1)} files/min` : '0 files/min';
+    const now = new Date();
+    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const recentImported = todayFiles.filter(
+      (f) => f.spStatus !== 404 && new Date(f.lastModified || f.createdTime) > hourAgo
+    );
+    const processingSpeed =
+      recentImported.length > 0 ? `${(recentImported.length / 60).toFixed(1)} files/min` : '0 files/min';
 
-  setStats({
-    totalFiles,
-    pendingFiles,
-    downloadedFiles,
-    importedFiles,
-    processingSpeed,
-    lastUpdated: now.toLocaleTimeString(),
-  });
-};
+    setStats({
+      totalFiles,
+      pendingFiles,
+      downloadedFiles,
+      importedFiles,
+      processingSpeed,
+      lastUpdated: now.toLocaleTimeString(),
+    });
+  };
 
   const startBuildTask = async (date: string) => {
     try {
@@ -277,11 +312,9 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
     }
   };
 
-  // New function to check and start import cycle while downloads are happening
   const startImportCycle = () => {
     if (importTimerRef.current) clearInterval(importTimerRef.current);
     
-    // Set a timer to periodically check for files to import
     importTimerRef.current = setInterval(async () => {
       try {
         const fileStatuses = await fileStatusService.getFileStatus();
@@ -294,12 +327,10 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
         );
         
         if (filesToImport.length > 0) {
-          // We found files to import
           await processImport(filesToImport);
           setLastImportTime(Date.now());
         }
         
-        // Check if all files are processed
         const allProcessed = !fileStatuses.some(
           (f) => 
             formatDate(new Date(f.createdTime)) === today &&
@@ -315,7 +346,7 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
       } catch (error) {
         console.error('Import cycle error:', error);
       }
-    }, 30000); // Check every 10 seconds for files to import
+    }, 30000);
   };
 
   const startDownload = async () => {
@@ -332,10 +363,8 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
         updateFileStates(todayFiles);
         updateStats(todayFiles);
 
-        // Check for files ready to import while download is still in progress
         const readyToImport = todayFiles.filter(f => f.dlStatus === 200 && f.spStatus === 404);
         if (readyToImport.length > 0 && Date.now() - lastImportTime > 15000) {
-          // Process imports in batches during downloads
           processImport(readyToImport);
           setLastImportTime(Date.now());
         }
@@ -344,7 +373,6 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
         if (!stillPending) {
           if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
           
-          // Check if there are files to import after all downloads complete
           const hasFilesToImport = todayFiles.some((f) => f.dlStatus === 200 && f.spStatus === 404);
           if (hasFilesToImport) {
             setDownloadCycleMessage('Ready to import');
@@ -361,7 +389,6 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
     }
   };
 
-  // Helper function for import processing
   const processImport = async (filesToImport: FileStatus[]) => {
     try {
       setDownloadCycleMessage('Hang tight! Automation is running....');
@@ -463,6 +490,12 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
     toast.success(`Opening folder: ${filepath}`);
   };
 
+  const navigateToDetails = (type: 'pending' | 'downloaded' | 'imported') => {
+    const allFiles = [...pending, ...downloaded];
+    localStorage.setItem('fileDetailsAllFiles', JSON.stringify(allFiles));
+    router.push(`/file-details/${type}`);
+  };
+
   return {
     username,
     loading,
@@ -485,5 +518,6 @@ const updateFileStates = (fileStatuses: FileStatus[]) => {
     showFileDetails,
     backToOverview,
     openContainingFolder,
+    navigateToDetails
   };
 };

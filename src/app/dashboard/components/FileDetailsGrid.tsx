@@ -2,37 +2,14 @@
 
 import React, { useState } from 'react';
 import { ChevronLeft, Download, Upload, ExternalLink, Clock, FileSpreadsheet, FileText, FileJson } from 'lucide-react';
+import { FileStatus } from '@/components/types';
 
-interface FileStatus {
-  id: string;
-  dir?: string;
-  segment?: string;
-  folderPath?: string;
-  filename: string;
-  filepath: string;
-  fileSize?: string;
-  filetype?: string;
-  spName?: string;
-  spParam?: string;
-  spParamValue?: string;
-  spPath?: string;
-  spStatus?: number;
-  dlStatus: number;
-  ePath?: string;
-  reserved?: string;
-  lastModified?: string;
-  spTime?: string;
-  dlTime?: string;
-  createdTime: string;
-  downloadedAt?: string;
-  importedAt?: string;
-}
-
-interface FileDetailsGridProps {
+export interface FileDetailsGridProps {
   files: FileStatus[];
   type: 'pending' | 'downloaded' | 'imported';
   onBack: () => void;
   onOpenFolder: (filepath: string) => void;
+  navigateToDetails: (type: 'pending' | 'downloaded' | 'imported') => void; // <-- add this line
 }
 
 export default function FileDetailsGrid({ files, type, onBack, onOpenFolder }: FileDetailsGridProps) {
@@ -215,7 +192,7 @@ export default function FileDetailsGrid({ files, type, onBack, onOpenFolder }: F
           <tbody className="text-gray-600 text-sm">
             {sortedFiles.length > 0 ? (
               sortedFiles.map((file) => (
-                <tr key={file.id} className="border-b border-gray-200 hover:bg-gray-50">
+                <tr key={file.taskId} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="py-3 px-6 text-left whitespace-nowrap">
                     <div className="flex items-center">
                       {getFileIcon(file.filename)}
