@@ -1,6 +1,6 @@
 ///components/types
 export interface ActivityLog {
-    id: number;
+  taskId: number;
   dir: string;
   segment: string;
   filename: string;
@@ -33,6 +33,23 @@ export interface FileStatus {
   dlTime: string;
   createdTime: string;
   fileSize: string;
+}
+
+
+
+export interface FileConfig {
+  id: number;
+  childPath: string | null;
+  file_name: string | null;
+  file_type: string | null;
+  format: string | null;
+  spName: string | null;
+  spParam: string | null;
+  spParamValue: string | null;
+  dirName: string;
+  segment: string;
+  folderName: string | null;
+  created_at: string | null;
 }
 
 export interface FileStats {

@@ -8,21 +8,8 @@ import Filters from './components/Filters';
 import Table from './components/Table';
 import Pagination from './components/Pagination';
 import Message from './components/Message';
+import { FileConfig } from '@/components/types';
 
-interface FileConfig {
-  id: number;
-  childPath: string | null;
-  file_name: string | null;
-  file_type: string | null;
-  format: string | null;
-  spName: string | null;
-  spParam: string | null;
-  spParamValue: string | null;
-  dirName: string;
-  segment: string;
-  folderName: string | null;
-  created_at: string | null;
-}
 
 export default function FileConfigPage() {
   const [fileConfigs, setFileConfigs] = useState<FileConfig[]>([]);

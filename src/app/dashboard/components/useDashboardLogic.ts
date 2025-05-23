@@ -44,6 +44,9 @@ export const useDashboardLogic = () => {
   const [downloaded, setDownloaded] = useState<FileStatus[]>([]);
   const [imported, setImported] = useState<FileStatus[]>([]);
   const [downloadCycleMessage, setDownloadCycleMessage] = useState('');
+  const [isNseFilesPending, setIsNseFilesPending] = useState(false);
+  const [showNseWarning, setShowNseWarning] = useState(false);
+  const [lastProcessAttempt, setLastProcessAttempt] = useState<number>(0);
   const [stats, setStats] = useState<Stats>({
     totalFiles: 0,
     pendingFiles: 0,
@@ -60,6 +63,7 @@ export const useDashboardLogic = () => {
   const statusTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoTriggerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const importTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const nseWarningTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatDate = (date: Date): string => date.toISOString().split('T')[0];
 
@@ -103,6 +107,31 @@ export const useDashboardLogic = () => {
     });
   };
 
+  // Check if files are available from NSE
+  const checkNseFileAvailability = (fileStatuses: FileStatus[]): boolean => {
+    const today = formatDate(new Date());
+    const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
+    
+    // If no files exist for today or all files are still pending download
+    return todayFiles.length === 0 || todayFiles.every(f => f.dlStatus !== 200);
+  };
+
+  // Show NSE warning message
+// Show NSE warning message
+const showNseFileWarning = () => {
+  setShowNseWarning(true);
+  setIsNseFilesPending(true);
+  setDownloadCycleMessage('Files not yet available from NSE. Please check back later.');
+  
+  // Keep the warning visible for 30 seconds instead of 10
+  if (nseWarningTimerRef.current) clearTimeout(nseWarningTimerRef.current);
+  nseWarningTimerRef.current = setTimeout(() => {
+    setShowNseWarning(false);
+    // Don't clear the downloadCycleMessage here - keep it visible
+  }, 30000); // 30 seconds instead of 10 seconds
+};
+
+
   // API Services
   const fileStatusService = {
     getFileStatus: async (): Promise<FileStatus[]> => {
@@ -128,14 +157,16 @@ export const useDashboardLogic = () => {
   };
 
   const downloadService = {
-    startDownload: async () => {
+    startDownload: async (): Promise<{success: boolean, message: string}> => {
       const response = await fetch(`${API_BASE}/DownloadFiles`, { method: 'GET' });
       if (!response.ok) throw new Error('Download failed');
+      const json = await response.json();
+      return json;
     },
   };
 
   const importService = {
-    importFiles: async (files: FileStatus[]): Promise<FileStatus[]> => {
+    importFiles: async (files: FileStatus[]): Promise<{success: boolean, message: string, data?: FileStatus[]}> => {
       if (files.length === 0) {
         throw new Error('No files provided for import');
       }
@@ -145,11 +176,13 @@ export const useDashboardLogic = () => {
       });
       if (!response.ok) throw new Error('Import failed');
       const json = await response.json();
-      if (json.success && Array.isArray(json.data)) {
+      
+      if (json.success && json.data && Array.isArray(json.data)) {
         // Process incremental files in the response
-        return processIncrementalFiles(json.data);
+        json.data = processIncrementalFiles(json.data);
       }
-      throw new Error('Invalid import response');
+      
+      return json;
     },
   };
 
@@ -187,7 +220,7 @@ export const useDashboardLogic = () => {
         if (isProcessing) refreshStatus();
       }, 20000);
 
-      // Auto-trigger timer
+      // Auto-trigger timer - increased to 5 minutes for NSE file availability
       autoTriggerTimerRef.current = setInterval(async () => {
         if (isProcessing) return;
         try {
@@ -196,11 +229,15 @@ export const useDashboardLogic = () => {
           const hasIncompleteFiles = todayFiles.some(
             (f) => f.dlStatus !== 200 || (f.dlStatus === 200 && f.spStatus === 404)
           );
-          if (hasIncompleteFiles || todayFiles.length === 0) triggerStart();
+          
+          // Only auto-trigger if files are available and incomplete
+          if (hasIncompleteFiles && !checkNseFileAvailability(fileStatuses)) {
+            triggerStart();
+          }
         } catch (error) {
           console.error('Error checking status for auto-trigger:', error);
         }
-      }, 180000);
+      }, 300000); // 5 minutes
 
       setLoading(false);
     };
@@ -212,6 +249,7 @@ export const useDashboardLogic = () => {
       if (autoTriggerTimerRef.current) clearInterval(autoTriggerTimerRef.current);
       if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
       if (importTimerRef.current) clearInterval(importTimerRef.current);
+      if (nseWarningTimerRef.current) clearTimeout(nseWarningTimerRef.current);
     };
   }, [router]);
 
@@ -239,6 +277,34 @@ export const useDashboardLogic = () => {
       updateFileStates(todayFiles);
       updateStats(todayFiles);
 
+      // Check if NSE files are available
+      if (checkNseFileAvailability(fileStatuses)) {
+        setIsNseFilesPending(true);
+        showNseFileWarning();
+        
+        // Stop processing if no files are available
+        if (todayFiles.length === 0) {
+          await startBuildTask(today);
+          // After build task, check again
+          setTimeout(async () => {
+            const newFileStatuses = await fileStatusService.getFileStatus();
+            if (checkNseFileAvailability(newFileStatuses)) {
+              setIsProcessing(false);
+              localStorage.removeItem('isProcessing');
+              return;
+            }
+          }, 5000);
+        } else {
+          setIsProcessing(false);
+          localStorage.removeItem('isProcessing');
+        }
+        return;
+      }
+
+      // Files are available, proceed with normal flow
+      setIsNseFilesPending(false);
+      setShowNseWarning(false);
+
       if (todayFiles.length === 0) {
         await startBuildTask(today);
       } else {
@@ -257,7 +323,7 @@ export const useDashboardLogic = () => {
         } else {
           setIsProcessing(false);
           localStorage.removeItem('isProcessing');
-          toast.success('All files have been processed');
+          toast.success('All files have been processed successfully!');
         }
       }
     } catch (error) {
@@ -341,7 +407,7 @@ export const useDashboardLogic = () => {
           if (importTimerRef.current) clearInterval(importTimerRef.current);
           setIsProcessing(false);
           localStorage.removeItem('isProcessing');
-          toast.success('All files have been processed');
+          toast.success('All files have been processed successfully!');
         }
       } catch (error) {
         console.error('Import cycle error:', error);
@@ -352,7 +418,18 @@ export const useDashboardLogic = () => {
   const startDownload = async () => {
     try {
       setDownloadCycleMessage('Hang tight! Automation is running...');
-      await downloadService.startDownload();
+      const downloadResult = await downloadService.startDownload();
+
+      // Check if download cycle ended without files
+      if (downloadResult.message === "Download cycle Ended") {
+        const fileStatuses = await fileStatusService.getFileStatus();
+        if (checkNseFileAvailability(fileStatuses)) {
+          showNseFileWarning();
+          setIsProcessing(false);
+          localStorage.removeItem('isProcessing');
+          return;
+        }
+      }
 
       if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
       downloadTimerRef.current = setInterval(async () => {
@@ -380,7 +457,7 @@ export const useDashboardLogic = () => {
           } else {
             setIsProcessing(false);
             localStorage.removeItem('isProcessing');
-            toast.success('All files processed successfully');
+            toast.success('All files processed successfully!');
           }
         }
       }, 5000);
@@ -392,19 +469,30 @@ export const useDashboardLogic = () => {
   const processImport = async (filesToImport: FileStatus[]) => {
     try {
       setDownloadCycleMessage('Hang tight! Automation is running....');
-      const importedResults = await importService.importFiles(filesToImport);
+      const importResult = await importService.importFiles(filesToImport);
       
-      const existingImported: FileStatus[] = JSON.parse(localStorage.getItem('importedFiles') || '[]');
-      const today = formatDate(new Date());
-      const newlyImported = importedResults.filter((f) => f.spStatus !== 404);
-      const updatedImported = [
-        ...existingImported.filter((f) => formatDate(new Date(f.createdTime)) === today),
-        ...newlyImported,
-      ];
-      localStorage.setItem('importedFiles', JSON.stringify(updatedImported));
+      if (importResult.success && importResult.data) {
+        const existingImported: FileStatus[] = JSON.parse(localStorage.getItem('importedFiles') || '[]');
+        const today = formatDate(new Date());
+        const newlyImported = importResult.data.filter((f) => f.spStatus !== 404);
+        const updatedImported = [
+          ...existingImported.filter((f) => formatDate(new Date(f.createdTime)) === today),
+          ...newlyImported,
+        ];
+        localStorage.setItem('importedFiles', JSON.stringify(updatedImported));
+        
+        if (newlyImported.length > 0) {
+          toast.success(`Successfully imported ${newlyImported.length} files`);
+        }
+        return newlyImported;
+      }
       
-      toast.success(`Successfully imported ${newlyImported.length} files`);
-      return newlyImported;
+      // Handle case where import cycle ended
+      if (importResult.message === "Import cycle Ended") {
+        toast.success('Import process completed');
+      }
+      
+      return [];
     } catch (error) {
       console.error('Import processing error:', error);
       throw error;
@@ -450,26 +538,43 @@ export const useDashboardLogic = () => {
     localStorage.removeItem('isProcessing');
     if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
     if (importTimerRef.current) clearInterval(importTimerRef.current);
+    if (nseWarningTimerRef.current) clearTimeout(nseWarningTimerRef.current);
   };
 
-  const triggerStart = () => {
-    if (isProcessing) {
-      toast.error('Process already running');
-      return;
-    }
-    localStorage.setItem('isProcessing', 'true');
-    localStorage.setItem('fs_startDate', startDate);
-    localStorage.setItem('fs_endDate', endDate);
-    setIsProcessing(true);
-    toast.success('Process started');
-    triggerGetFileStatus();
-  };
+const triggerStart = () => {
+  const now = Date.now();
+  
+  // Check if user tried to start process within last 2 minutes
+  if (isNseFilesPending && now - lastProcessAttempt < 120000) {
+    toast.error('Please wait a few minutes before trying again. NSE files may not be ready yet.');
+    showNseFileWarning();
+    return;
+  }
+
+  if (isProcessing) {
+    toast.error('Process already running');
+    return;
+  }
+
+  setLastProcessAttempt(now);
+  localStorage.setItem('isProcessing', 'true');
+  localStorage.setItem('fs_startDate', startDate);
+  localStorage.setItem('fs_endDate', endDate);
+  setIsProcessing(true);
+  setShowNseWarning(false);
+  toast.success('Process started');
+  triggerGetFileStatus();
+};
+
 
   const cancelProcess = () => {
     if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
     if (importTimerRef.current) clearInterval(importTimerRef.current);
+    if (nseWarningTimerRef.current) clearTimeout(nseWarningTimerRef.current);
     setIsProcessing(false);
     setDownloadCycleMessage('');
+    setShowNseWarning(false);
+    setIsNseFilesPending(false);
     localStorage.removeItem('isProcessing');
     localStorage.removeItem('fs_startDate');
     localStorage.removeItem('fs_endDate');
@@ -508,6 +613,8 @@ export const useDashboardLogic = () => {
     downloaded,
     imported,
     downloadCycleMessage,
+    showNseWarning,
+    isNseFilesPending,
     stats,
     activityLogs,
     setStartDate,
