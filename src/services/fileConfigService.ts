@@ -1,8 +1,8 @@
-const baseURL = process.env.NEXT_PUBLIC_API_URL;
+const baseURL =process.env.NEXT_PUBLIC_API_URL+'/api/automate';
 
 export const getFileConfigurations = async () => {
   try {
-    const response = await fetch(`${baseURL}/api/automate/getDB`);
+    const response = await fetch(`${baseURL}/getDB`);
     const data = await response.json();
     if (data.success) {
       return data.data;

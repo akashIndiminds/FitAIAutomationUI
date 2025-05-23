@@ -250,13 +250,19 @@ const getStatusCount = useCallback(
     setErrorState(null);
   }, []);
 
- useEffect(() => {
+
+  useEffect(() => {
   if (selectedDate !== displayedDate) {
     setFileStatusFilter('');
     setDirFilter('');
     setSegmentFilter('');
+    setSearchTerm('');
+    setSortColumn('lastModified');
+    setSortDirection('desc');
   }
 }, [selectedDate, displayedDate]);
+
+
   useEffect(() => {
     applyFilters();
   }, [applyFilters]);

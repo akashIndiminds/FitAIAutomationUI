@@ -1,4 +1,5 @@
 import { ActivityLog } from '@/components/types';
+
 interface ActivityTableProps {
   logs: ActivityLog[];
   sortColumn: string;
@@ -99,8 +100,11 @@ export function ActivityTable({
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {logs.length > 0 ? (
-            logs.map((log) => (
-              <tr key={log.id} className={`hover:bg-gray-50 ${getRowClass(log)}`}>
+            logs.map((log, index) => (
+              <tr 
+                key={log.taskId ? `${log.taskId}` : `log-${index}-${log.filename}-${log.dir}-${log.segment}`} 
+                className={`hover:bg-gray-50 ${getRowClass(log)}`}
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">{log.filename}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.dir}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{log.segment}</td>

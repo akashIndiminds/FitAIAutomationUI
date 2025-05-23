@@ -1,6 +1,8 @@
+'use client';
 import React, { Dispatch, SetStateAction } from 'react';
 import { Search, X, Filter, ArrowLeft } from 'lucide-react';
-import router from 'next/router';
+import { useRouter } from 'next/navigation';
+
 interface ActivityLogHeaderProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
@@ -16,16 +18,15 @@ export default function Header({
   setIsFilterVisible,
   isLoading,
 }: ActivityLogHeaderProps) {
+  const router = useRouter();
 
- 
   const handleBackToDashboard = () => {
-  router.push('/dashboard'); 
-};
+    router.push('/dashboard');
+  };
 
   return (
     <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-indigo-900 via-blue-800 to-indigo-900 rounded-t-lg shadow-md">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full mx-auto">
-
         {/* Title + Back Button */}
         <div className="flex items-center gap-4">
           <button

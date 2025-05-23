@@ -29,7 +29,7 @@ class AuthService {
   private maxRetries: number = 3;
   private readonly TOKEN_KEY = 'auth_token';
   private readonly LOGIN_TIME_KEY = 'login_time';
-  private readonly REFRESH_INTERVAL = 25 * 60 * 1000; // 25 minutes (to refresh before 30-min expiry)
+  private readonly REFRESH_INTERVAL = 25 * 60 * 1000; // 25 minutes
   
   constructor() {
     this.api = axios.create({
@@ -37,6 +37,7 @@ class AuthService {
       headers: {
         'Content-Type': 'application/json',
       },
+      timeout: 30000, // 30 seconds timeout for regular requests
     });
 
     // Add response interceptor for handling token expiration
@@ -64,12 +65,10 @@ class AuthService {
           try {
             const refreshed = await this.refreshToken();
             if (refreshed) {
-              // Get fresh token and retry request
               const token = this.getToken();
               originalRequest.headers['Authorization'] = `Bearer ${token}`;
               return this.api(originalRequest);
             } else {
-              // If refresh failed, redirect to login
               this.logout(true);
               return Promise.reject(new Error('Session expired. Please log in again.'));
             }
@@ -91,11 +90,18 @@ class AuthService {
   async validateLocalCredentials(loginId: string, password: string): Promise<LocalValidationResponse> {
     try {
       const response = await this.api.get<LocalValidationResponse>('/login', {
-        params: { loginId, password }
+        params: { loginId, password },
+        timeout: 15000, // 15 seconds for credential validation
       });
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Local validation error:', error);
+      
+      // Handle timeout specifically for local validation
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Connection timeout while validating credentials. Please try again.');
+      }
+      
       throw error;
     }
   }
@@ -105,19 +111,41 @@ class AuthService {
    */
   async login(credentials = config.loginCredentials): Promise<LoginResponse> {
     try {
-      const response = await this.api.post<LoginResponse>('/api/login/auth', credentials);
+      // Extended timeout for NSE API since it's external
+      const response = await this.api.post<LoginResponse>('/api/login/auth', credentials, {
+        timeout: 45000, // 45 seconds timeout for NSE API
+      });
       
       if (response.data.success && response.data.msg.token) {
-        // Set token and login time in cookies when login is successful
         this.setToken(response.data.msg.token);
         this.setLoginTime(Date.now().toString());
-        // Start token refresh cycle
         this.startTokenRefresh();
       }
       
       return response.data;
-    } catch (error) {
-      console.error('Login error:', error);
+    } catch (error: any) {
+      console.error('NSE login error:', error);
+      
+      // Enhanced error handling for NSE API
+      if (error.code === 'ECONNABORTED') {
+        const timeoutError = new Error('NSE server connection timed out. The server is taking longer than expected to respond.');
+        timeoutError.name = 'TimeoutError';
+        throw timeoutError;
+      }
+      
+      if (error.response?.status === 0 || !error.response) {
+        const networkError = new Error('Unable to connect to NSE server. Please check your internet connection.');
+        networkError.name = 'NetworkError';
+        throw networkError;
+      }
+      
+      // Handle specific NSE error codes
+      if (error.response?.data?.msg?.message) {
+        const nseError = new Error(error.response.data.msg.message);
+        nseError.name = 'NSEError';
+        throw nseError;
+      }
+      
       throw error;
     }
   }
@@ -128,11 +156,17 @@ class AuthService {
   async completeLoginProcess(loginId: string, password: string, nseResponseCode: number): Promise<LocalValidationResponse> {
     try {
       const response = await this.api.get<LocalValidationResponse>('/nse-login', {
-        params: { loginId, password, nseResponseCode }
+        params: { loginId, password, nseResponseCode },
+        timeout: 20000, // 20 seconds for completion
       });
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login completion error:', error);
+      
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Connection timeout during login completion. Please try again.');
+      }
+      
       throw error;
     }
   }
@@ -142,37 +176,32 @@ class AuthService {
    */
   async refreshToken(): Promise<boolean> {
     try {
-      // Use the dedicated refresh endpoint
       const response = await fetch('/api/auth/refresh', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Include cookies in the request
+        credentials: 'include',
       });
       
       const data = await response.json();
       
       if (response.ok && data.success && data.token) {
-        // Token refreshed via API, cookies should be set by the API
         this.retryCount = 0;
         console.log('Token refreshed successfully via API');
         return true;
       }
       
-      // If API refresh failed, attempt to refresh directly
       console.log('API refresh failed, attempting direct refresh');
       return await this.refreshDirectly();
     } catch (error) {
       console.error('Token refresh API error:', error);
-      // Fallback to direct refresh if API call fails
       return await this.refreshDirectly();
     }
   }
 
   /**
    * Direct token refresh without using the API endpoint
-   * Used as a fallback if the API refresh fails
    */
   private async refreshDirectly(): Promise<boolean> {
     try {
@@ -202,17 +231,15 @@ class AuthService {
     }
 
     try {
-      // Use dedicated logout API endpoint
       await fetch('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include', // Include cookies in the request
+        credentials: 'include',
       });
       console.log('Logout request successful');
     } catch (error) {
       console.log('Logout request failed', error);
     }
     
-    // Clear local tokens
     this.clearTokens();
     
     if (!silent) {

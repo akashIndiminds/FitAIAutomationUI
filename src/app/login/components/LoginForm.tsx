@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, User, Lock, AlertCircle, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, User, Lock, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
 interface LoginFormProps {
   loginId: string;
@@ -8,6 +8,7 @@ interface LoginFormProps {
   password: string;
   setPassword: (value: string) => void;
   isLoggingIn: boolean;
+  loginStatus: string;
   handleSubmit: (e: React.FormEvent) => void;
 }
 
@@ -22,6 +23,7 @@ export default function LoginForm({
   password,
   setPassword,
   isLoggingIn,
+  loginStatus,
   handleSubmit,
 }: LoginFormProps) {
   const [showPassword, setShowPassword] = useState(false);
@@ -30,24 +32,19 @@ export default function LoginForm({
   const [isValid, setIsValid] = useState(false);
 
   // Validation logic
-const validateLoginId = (value: string): string | undefined => {
-  const trimmedValue = value.trim();
-  if (!trimmedValue) return 'Login ID is required';
-  if (trimmedValue.length < 3) return 'Login ID must be at least 3 characters';
-  if (!/^[a-zA-Z0-9@._-]+$/.test(trimmedValue)) return 'Invalid characters in Login ID';
-  return undefined;
-};
+  const validateLoginId = (value: string): string | undefined => {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return 'Login ID is required';
+    if (trimmedValue.length < 3) return 'Login ID must be at least 3 characters';
+    if (!/^[a-zA-Z0-9@._-]+$/.test(trimmedValue)) return 'Invalid characters in Login ID';
+    return undefined;
+  };
 
-const validatePassword = (value: string): string | undefined => {
-  if (!value) return 'Password is required';
-  if (value.length < 3) return 'Password must be at least 3 characters';
-
-  // Future validation logic (currently commented out):
-  // if (!/(?=.*[a-z])(?=.*[A-Z])/.test(value)) 
-  //   return 'Password must contain uppercase and lowercase letters';
-
-  return undefined;
-};
+  const validatePassword = (value: string): string | undefined => {
+    if (!value) return 'Password is required';
+    if (value.length < 3) return 'Password must be at least 3 characters';
+    return undefined;
+  };
 
   // Update validation on input change
   useEffect(() => {
@@ -93,7 +90,6 @@ const validatePassword = (value: string): string | undefined => {
     setTouched(prev => ({ ...prev, [field]: true }));
     
     if (field === 'loginId') {
-      // Auto-trim loginId on blur
       const trimmedValue = loginId.trim();
       if (trimmedValue !== loginId) {
         setLoginId(trimmedValue);
@@ -113,7 +109,6 @@ const validatePassword = (value: string): string | undefined => {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Final validation and trimming
     const trimmedLoginId = loginId.trim();
     setLoginId(trimmedLoginId);
     
@@ -159,18 +154,18 @@ const validatePassword = (value: string): string | undefined => {
               value={loginId}
               onChange={handleLoginIdChange}
               onBlur={() => handleBlur('loginId')}
-              className={`w-full px-4 py-3.5 pl-12 bg-white/5 backdrop-blur-sm border-2 rounded-xl 
+              disabled={isLoggingIn}
+              className={`w-full px-4 py-3.5 bg-white/5 backdrop-blur-sm border-2 rounded-xl 
                 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 outline-none text-white 
                 placeholder-white/40 transition-all duration-300 hover:bg-white/10
                 ${errors.loginId ? 'border-red-400/60' : 'border-white/20'}
                 ${!errors.loginId && touched.loginId && loginId.trim() ? 'border-green-400/60' : ''}
+                ${isLoggingIn ? 'opacity-60 cursor-not-allowed' : ''}
               `}
               placeholder="Enter your login ID"
               required
             />
-            <User className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/40" />
             
-            {/* Validation Icons */}
             <AnimatePresence>
               {touched.loginId && (
                 <motion.div
@@ -188,11 +183,9 @@ const validatePassword = (value: string): string | undefined => {
               )}
             </AnimatePresence>
             
-            {/* Glow Effect */}
             <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 opacity-0 group-focus-within:opacity-100 -z-10 blur-lg transition-opacity duration-300" />
           </div>
           
-          {/* Error Message */}
           <AnimatePresence>
             {errors.loginId && (
               <motion.p
@@ -226,31 +219,30 @@ const validatePassword = (value: string): string | undefined => {
               value={password}
               onChange={handlePasswordChange}
               onBlur={() => handleBlur('password')}
-              className={`w-full px-4 py-3.5 pl-12 pr-12 bg-white/5 backdrop-blur-sm border-2 rounded-xl 
+              disabled={isLoggingIn}
+              className={`w-full px-4 py-3.5 bg-white/5 backdrop-blur-sm border-2 rounded-xl 
                 focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400/50 outline-none text-white 
                 placeholder-white/40 transition-all duration-300 hover:bg-white/10
                 ${errors.password ? 'border-red-400/60' : 'border-white/20'}
                 ${!errors.password && touched.password && password ? 'border-green-400/60' : ''}
+                ${isLoggingIn ? 'opacity-60 cursor-not-allowed' : ''}
               `}
               placeholder="Enter your password"
               required
             />
-            <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/40" />
-            
-            {/* Show/Hide Password Button */}
+
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+              disabled={isLoggingIn}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors disabled:opacity-50"
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
             
-            {/* Glow Effect */}
             <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 opacity-0 group-focus-within:opacity-100 -z-10 blur-lg transition-opacity duration-300" />
           </div>
           
-          {/* Error Message */}
           <AnimatePresence>
             {errors.password && (
               <motion.p
@@ -265,6 +257,21 @@ const validatePassword = (value: string): string | undefined => {
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* Login Status Message */}
+        <AnimatePresence>
+          {loginStatus && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              className="bg-blue-500/10 border border-blue-400/20 rounded-lg p-3 flex items-center justify-center"
+            >
+              <Loader2 className="w-4 h-4 mr-2 text-blue-400 animate-spin" />
+              <span className="text-blue-300 text-sm font-medium">{loginStatus}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Submit Button */}
         <motion.div 
@@ -299,7 +306,7 @@ const validatePassword = (value: string): string | undefined => {
                     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                     className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full mr-3"
                   />
-                  Logging in...
+                  Signing In...
                 </motion.div>
               ) : (
                 <motion.span
@@ -310,7 +317,7 @@ const validatePassword = (value: string): string | undefined => {
                   className="flex items-center justify-center"
                 >
                   <Lock className="w-4 h-4 mr-2" />
-                  Log In
+                  Sign In
                 </motion.span>
               )}
             </AnimatePresence>
@@ -319,7 +326,7 @@ const validatePassword = (value: string): string | undefined => {
 
         {/* Form Status Indicator */}
         <AnimatePresence>
-          {isValid && !isLoggingIn && (
+          {isValid && !isLoggingIn && !loginStatus && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
