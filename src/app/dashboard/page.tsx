@@ -8,7 +8,7 @@ import TaskManager from './components/TaskManager';
 import FileDetailsGrid from './components/FileDetailsGrid';
 import SystemStatusSection from './components/SystemStatusSection';
 import { useDashboardLogic } from './components/useDashboardLogic';
-
+import { authService } from '@/services/authService';
 
 export default function Dashboard() {
   const {
@@ -32,8 +32,6 @@ export default function Dashboard() {
     showFileDetails,
     backToOverview,
     openContainingFolder,
-    showNseWarning, 
-    isNseFilesPending, 
     navigateToDetails,
   } = useDashboardLogic();
 
@@ -180,7 +178,6 @@ export default function Dashboard() {
           error: { iconTheme: { primary: '#EF4444', secondary: '#FFFFFF' } },
         }}
       />
-   
 
       <div className="w-full px-6 py-6">
         <div className="mb-6">
@@ -195,21 +192,17 @@ export default function Dashboard() {
             <div className="bg-white rounded-2xl p-1 transform transition-all duration-300 hover:scale-[1.01] shadow-[0_20px_50px_rgba(8,_112,_184,_0.1)]">
               <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl overflow-hidden">
                 <div className="p-4">
-                 {/* Just updating the Controls component part in the Dashboard */}
-<Controls
-  startDate={startDate}
-  endDate={endDate}
-  setStartDate={setStartDate}
-  setEndDate={setEndDate}
-  isProcessing={isProcessing}
-  onStart={triggerStart}
-  onCancel={cancelProcess}
-  onRefresh={refreshStatus}
-  downloadCycleMessage={downloadCycleMessage}
-  showNseWarning={showNseWarning}
-  isNseFilesPending={isNseFilesPending}
-/>
-
+                  <Controls
+                    startDate={startDate}
+                    endDate={endDate}
+                    setStartDate={setStartDate}
+                    setEndDate={setEndDate}
+                    isProcessing={isProcessing}
+                    onStart={triggerStart}
+                    onCancel={cancelProcess}
+                    onRefresh={refreshStatus}
+                    downloadCycleMessage={downloadCycleMessage}
+                  />
                 </div>
               </div>
             </div>
