@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Bell, Settings, Search, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
@@ -15,6 +15,9 @@ export default function TopBar({ username, toggleSidebar, isSidebarOpen }: TopBa
   const router = useRouter();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  
+ const notificationsRef = useRef<HTMLDivElement>(null);
+const settingsRef = useRef<HTMLDivElement>(null);
   
   const notifications = [
     { id: 1, text: "New file imported", time: "5m ago" },
@@ -33,11 +36,29 @@ export default function TopBar({ username, toggleSidebar, isSidebarOpen }: TopBa
     }
   };
 
-  // Close dropdowns when clicking elsewhere
-  const handleClickOutside = () => {
-    if (showNotifications) setShowNotifications(false);
-    if (showSettings) setShowSettings(false);
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      showNotifications &&
+      notificationsRef.current &&
+      !notificationsRef.current.contains(event.target as Node)
+    ) {
+      setShowNotifications(false);
+    }
+    if (
+      showSettings &&
+      settingsRef.current &&
+      !settingsRef.current.contains(event.target as Node)
+    ) {
+      setShowSettings(false);
+    }
   };
+
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside);
+  };
+}, [showNotifications, showSettings]);
 
   return (
     <header className="bg-white sticky top-0 z-20 w-full">
@@ -46,7 +67,6 @@ export default function TopBar({ username, toggleSidebar, isSidebarOpen }: TopBa
           background: 'linear-gradient(145deg, #ffffff, #f5f7fa)',
           boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.1)'
         }}
-        onClick={handleClickOutside}
       >
         <div className="flex items-center space-x-2 sm:space-x-3">
           {/* Hamburger Menu for mobile */}
@@ -108,7 +128,9 @@ export default function TopBar({ username, toggleSidebar, isSidebarOpen }: TopBa
             </button>
             
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-lg shadow-xl z-50 transform transition-all duration-200 origin-top-right"
+              <div 
+                ref={notificationsRef}
+                className="absolute right-0 mt-2 w-64 sm:w-72 bg-white rounded-lg shadow-xl z-50 transform transition-all duration-200 origin-top-right"
                 style={{ boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -148,7 +170,9 @@ export default function TopBar({ username, toggleSidebar, isSidebarOpen }: TopBa
             </button>
             
             {showSettings && (
-              <div className="absolute right-0 mt-2 w-40 sm:w-48 bg-white rounded-lg shadow-xl z-50"
+              <div 
+                ref={settingsRef}
+                className="absolute right-0 mt-2 w-40 sm:w-48 bg-white rounded-lg shadow-xl z-50"
                 style={{ boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
                 onClick={(e) => e.stopPropagation()}
               >
