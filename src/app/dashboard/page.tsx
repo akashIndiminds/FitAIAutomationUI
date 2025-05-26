@@ -23,6 +23,8 @@ export default function Dashboard() {
     downloaded,
     imported,
     downloadCycleMessage,
+    retryScheduled,
+    nextRetryTime,
     stats,
     setStartDate,
     setEndDate,
@@ -53,6 +55,22 @@ export default function Dashboard() {
       });
     }
 
+    if (retryScheduled && nextRetryTime) {
+      const minutesUntilRetry = Math.max(0, Math.ceil((nextRetryTime.getTime() - Date.now()) / (60 * 1000)));
+      
+      tasks.push({
+        id: 'retry-task',
+        title: 'NSE Files Availability Check',
+        description: `Waiting for NSE to upload files. Retrying in ${minutesUntilRetry} minute(s).`,
+        status: 'pending' as const, // Changed from 'waiting' to 'pending'
+        priority: 'medium' as const,
+        progress: 0,
+        createdAt: new Date().toISOString(),
+        estimatedTime: `${minutesUntilRetry} min`,
+        fileCount: 0
+      });
+    }
+
     if (downloaded.length > 0) {
       tasks.push({
         id: 'import-task',
@@ -80,7 +98,7 @@ export default function Dashboard() {
       });
     }
 
-    if (pending.length > 0 && !isProcessing) {
+    if (pending.length > 0 && !isProcessing && !retryScheduled) {
       tasks.push({
         id: 'pending-task',
         title: 'Pending File Processing',
@@ -100,12 +118,12 @@ export default function Dashboard() {
   const handleTaskAction = (taskId: string, action: 'start' | 'pause' | 'cancel' | 'retry') => {
     switch (action) {
       case 'start':
-        if (taskId === 'pending-task' || taskId === 'download-task') {
+        if (taskId === 'pending-task' || taskId === 'download-task' || taskId === 'retry-task') {
           triggerStart();
         }
         break;
       case 'cancel':
-        if (taskId === 'download-task') {
+        if (taskId === 'download-task' || taskId === 'retry-task') {
           cancelProcess();
         }
         break;
