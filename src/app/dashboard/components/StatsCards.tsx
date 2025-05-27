@@ -137,7 +137,7 @@ export default function StatsCards({ stats , navigateToDetails}: StatsCardsProps
                 {card.action && (
                <button
   onClick={card.action}
-  className={`cursor-pointer inline-flex items-center px-5 py-2.5 bg-gradient-to-r ${card.gradient} 
+  className={`cursor-pointer inline-flex items-center px-2.5 py-1.5 bg-gradient-to-r ${card.gradient} 
               text-white font-semibold rounded-xl shadow-md
               hover:shadow-xl hover:brightness-110
               active:scale-95 active:shadow-inner

@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import authService from '@/services/authService';
 import { FileStatus, FileStats } from '@/components/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL+'/api/automate/';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL+'/api/automate';
 
 interface Stats {
   totalFiles: number;
@@ -44,6 +44,8 @@ export const useDashboardLogic = () => {
   const [downloaded, setDownloaded] = useState<FileStatus[]>([]);
   const [imported, setImported] = useState<FileStatus[]>([]);
   const [downloadCycleMessage, setDownloadCycleMessage] = useState('');
+  const [retryScheduled, setRetryScheduled] = useState(false);
+  const [nextRetryTime, setNextRetryTime] = useState<Date | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalFiles: 0,
     pendingFiles: 0,
@@ -60,6 +62,8 @@ export const useDashboardLogic = () => {
   const statusTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoTriggerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const importTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatDate = (date: Date): string => date.toISOString().split('T')[0];
 
@@ -131,6 +135,7 @@ export const useDashboardLogic = () => {
     startDownload: async () => {
       const response = await fetch(`${API_BASE}/DownloadFiles`, { method: 'GET' });
       if (!response.ok) throw new Error('Download failed');
+      return response.json();
     },
   };
 
@@ -153,6 +158,61 @@ export const useDashboardLogic = () => {
     },
   };
 
+  // Initialize countdown for retry
+  const startRetryCountdown = (minutes: number) => {
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    
+    const retryTime = new Date(Date.now() + minutes * 60 * 1000);
+    setNextRetryTime(retryTime);
+    setRetryScheduled(true);
+    
+    countdownTimerRef.current = setInterval(() => {
+      const now = new Date();
+      const timeLeft = Math.max(0, Math.floor((retryTime.getTime() - now.getTime()) / 1000));
+      
+      if (timeLeft <= 0) {
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        return;
+      }
+      
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      setDownloadCycleMessage(
+        `Note: Files not available from NSE yet. Will retry in ${minutes}:${seconds < 10 ? '0' : ''}${seconds}. Please check back later!`
+      );
+    }, 1000);
+  };
+
+  // Schedule retry
+  const scheduleRetry = (minutes: number = 5) => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    
+    startRetryCountdown(minutes);
+    
+    retryTimerRef.current = setTimeout(() => {
+      setRetryScheduled(false);
+      setNextRetryTime(null);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      triggerGetFileStatus();
+    }, minutes * 60 * 1000);
+    
+    // Save retry information to localStorage for persistence
+    localStorage.setItem('retry_scheduled', 'true');
+    localStorage.setItem('next_retry_time', (Date.now() + minutes * 60 * 1000).toString());
+  };
+
+  // Clear retry schedule
+  const clearRetrySchedule = () => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    
+    setRetryScheduled(false);
+    setNextRetryTime(null);
+    
+    localStorage.removeItem('retry_scheduled');
+    localStorage.removeItem('next_retry_time');
+  };
+
   // Initialization
   useEffect(() => {
     const initialize = async () => {
@@ -169,6 +229,25 @@ export const useDashboardLogic = () => {
       const processing = localStorage.getItem('isProcessing') === 'true';
       setIsProcessing(processing);
 
+      // Check if there's a scheduled retry
+      const retryScheduled = localStorage.getItem('retry_scheduled') === 'true';
+      const nextRetryTimeStr = localStorage.getItem('next_retry_time');
+      
+      if (retryScheduled && nextRetryTimeStr) {
+        const nextRetryTime = new Date(parseInt(nextRetryTimeStr));
+        const now = new Date();
+        
+        if (nextRetryTime > now) {
+          // Continue countdown
+          const minutesLeft = Math.max(1, Math.ceil((nextRetryTime.getTime() - now.getTime()) / (60 * 1000)));
+          scheduleRetry(minutesLeft);
+        } else {
+          // Retry time has passed, trigger immediately
+          clearRetrySchedule();
+          triggerGetFileStatus();
+        }
+      }
+
       if (processing) {
         setStartDate(localStorage.getItem('fs_startDate') || today);
         setEndDate(localStorage.getItem('fs_endDate') || today);
@@ -184,12 +263,12 @@ export const useDashboardLogic = () => {
 
       // Status check timer
       statusTimerRef.current = setInterval(() => {
-        if (isProcessing) refreshStatus();
+        if (isProcessing && !retryScheduled) refreshStatus();
       }, 20000);
 
       // Auto-trigger timer
       autoTriggerTimerRef.current = setInterval(async () => {
-        if (isProcessing) return;
+        if (isProcessing || retryScheduled) return;
         try {
           const fileStatuses = await fileStatusService.getFileStatus();
           const todayFiles = fileStatuses.filter((f) => formatDate(new Date(f.createdTime)) === today);
@@ -212,6 +291,8 @@ export const useDashboardLogic = () => {
       if (autoTriggerTimerRef.current) clearInterval(autoTriggerTimerRef.current);
       if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
       if (importTimerRef.current) clearInterval(importTimerRef.current);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, [router]);
 
@@ -340,6 +421,7 @@ export const useDashboardLogic = () => {
         if (allProcessed) {
           if (importTimerRef.current) clearInterval(importTimerRef.current);
           setIsProcessing(false);
+          clearRetrySchedule();
           localStorage.removeItem('isProcessing');
           toast.success('All files have been processed');
         }
@@ -352,7 +434,22 @@ export const useDashboardLogic = () => {
   const startDownload = async () => {
     try {
       setDownloadCycleMessage('Hang tight! Automation is running...');
-      await downloadService.startDownload();
+      const downloadResponse = await downloadService.startDownload();
+      
+      // Check for special response cases
+      if (downloadResponse && downloadResponse.success === true) {
+        if (downloadResponse.message === "Download cycle Ended") {
+          // NSE files not available yet
+          setIsProcessing(false);
+          scheduleRetry(5); // Retry in 5 minutes
+          return;
+        } else if (downloadResponse.message === "Import cycle Ended") {
+          // Import issues with NSE
+          setIsProcessing(false);
+          scheduleRetry(5); // Retry in 5 minutes
+          return;
+        }
+      }
 
       if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
       downloadTimerRef.current = setInterval(async () => {
@@ -379,6 +476,7 @@ export const useDashboardLogic = () => {
             startImport();
           } else {
             setIsProcessing(false);
+            clearRetrySchedule();
             localStorage.removeItem('isProcessing');
             toast.success('All files processed successfully');
           }
@@ -394,9 +492,23 @@ export const useDashboardLogic = () => {
       setDownloadCycleMessage('Hang tight! Automation is running....');
       const importedResults = await importService.importFiles(filesToImport);
       
+      // Check for special response cases in import
+      if (importedResults && typeof importedResults === 'object' && 'success' in importedResults) {
+        const response = importedResults as unknown as { success: boolean, message: string };
+        if (response.success === true && response.message === "Import cycle Ended") {
+          // Import issues with NSE
+          setIsProcessing(false);
+          scheduleRetry(5); // Retry in 5 minutes
+          return [];
+        }
+      }
+      
       const existingImported: FileStatus[] = JSON.parse(localStorage.getItem('importedFiles') || '[]');
       const today = formatDate(new Date());
-      const newlyImported = importedResults.filter((f) => f.spStatus !== 404);
+      const newlyImported = Array.isArray(importedResults) 
+        ? importedResults.filter((f) => f.spStatus !== 404)
+        : [];
+      
       const updatedImported = [
         ...existingImported.filter((f) => formatDate(new Date(f.createdTime)) === today),
         ...newlyImported,
@@ -431,6 +543,7 @@ export const useDashboardLogic = () => {
 
       if (allImported) {
         setIsProcessing(false);
+        clearRetrySchedule();
         localStorage.removeItem('isProcessing');
       }
     } catch (error) {
@@ -447,6 +560,7 @@ export const useDashboardLogic = () => {
       toast.error(`Error: ${message}`);
     }
     setIsProcessing(false);
+    clearRetrySchedule();
     localStorage.removeItem('isProcessing');
     if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
     if (importTimerRef.current) clearInterval(importTimerRef.current);
@@ -457,10 +571,15 @@ export const useDashboardLogic = () => {
       toast.error('Process already running');
       return;
     }
+    
+    // Clear any existing retry schedule
+    clearRetrySchedule();
+    
     localStorage.setItem('isProcessing', 'true');
     localStorage.setItem('fs_startDate', startDate);
     localStorage.setItem('fs_endDate', endDate);
     setIsProcessing(true);
+    setDownloadCycleMessage('Hang tight! Automation is running...');
     toast.success('Process started');
     triggerGetFileStatus();
   };
@@ -468,6 +587,7 @@ export const useDashboardLogic = () => {
   const cancelProcess = () => {
     if (downloadTimerRef.current) clearInterval(downloadTimerRef.current);
     if (importTimerRef.current) clearInterval(importTimerRef.current);
+    clearRetrySchedule();
     setIsProcessing(false);
     setDownloadCycleMessage('');
     localStorage.removeItem('isProcessing');
@@ -508,6 +628,8 @@ export const useDashboardLogic = () => {
     downloaded,
     imported,
     downloadCycleMessage,
+    retryScheduled,
+    nextRetryTime,
     stats,
     activityLogs,
     setStartDate,
