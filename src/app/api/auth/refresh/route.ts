@@ -4,19 +4,16 @@ import { config } from '@/config/appconfig';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Token refresh requested');
+    console.log('Token refresh API route called');
     
-    // Get current login time from cookies (for monitoring purposes)
-    const currentLoginTime = request.cookies.get('login_time')?.value;
-    console.log(`Current login time: ${currentLoginTime}`);
-    
-    // Always refresh using NSE credentials - this ensures continuous session
+    // Always refresh using NSE credentials from config
     const refreshResponse = await fetch(`${config.baseUrl}/api/login/auth`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(config.loginCredentials),
+      cache: 'no-store',
     });
     
     const refreshData = await refreshResponse.json();
@@ -29,20 +26,20 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Get the new token and set expiry time
+    // Get the new token
     const newToken = refreshData.msg.token;
-    const expiresIn = 60 * 60; // 1 hour in seconds
+    const expiresIn = 45 * 60; // 45 minutes in seconds (matching NSE expiration)
     
-    console.log('Token refreshed successfully');
+    console.log('Token refreshed successfully via API route');
     
     // Create response with new token
     const response = NextResponse.json({
       success: true,
-      token: newToken,
+      token: newToken, // Send token for client-side storage as well
       message: 'Token refreshed successfully'
     });
     
-    // Set the updated token in cookies
+    // Set the updated token in cookies (both HTTP-only and client-accessible)
     response.cookies.set('auth_token', newToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -50,9 +47,26 @@ export async function POST(request: NextRequest) {
       path: '/',
     });
     
+    // Set a non-HTTP-only version for client access
+    response.cookies.set('auth_token_client', newToken, {
+      httpOnly: false, 
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: expiresIn,
+      path: '/',
+    });
+    
     // Update the login time
-    response.cookies.set('login_time', Date.now().toString(), {
+    const currentTime = Date.now().toString();
+    response.cookies.set('login_time', currentTime, {
       httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: expiresIn,
+      path: '/',
+    });
+    
+    // Also set a client-accessible version
+    response.cookies.set('login_time_client', currentTime, {
+      httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       maxAge: expiresIn,
       path: '/',
